@@ -175,6 +175,7 @@ export default function BoardPage() {
   }
 
   async function confirmPlayerPayments(playerId: string) {
+    if (!board) return
     setConfirming(playerId)
     const { error: updateError } = await supabase
       .from('squares')
@@ -188,6 +189,7 @@ export default function BoardPage() {
   }
 
   async function handleDrawNumbers() {
+    if (!board) return
     const { error: updateError } = await supabase
       .from('boards')
       .update({
