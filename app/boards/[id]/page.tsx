@@ -35,6 +35,7 @@ export default function BoardPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [squares, setSquares] = useState<SquareRow[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [isOwnerUser, setIsOwnerUser] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -50,6 +51,11 @@ export default function BoardPage() {
     setError('')
     const { data: { user } } = await supabase.auth.getUser()
     setUserId(user?.id || null)
+
+    if (user) {
+      const { data: profile } = await supabase.from('users').select('is_owner').eq('id', user.id).maybeSingle()
+      setIsOwnerUser(!!profile?.is_owner)
+    }
 
     const { data: boardData, error: boardError } = await supabase
       .from('boards')
@@ -99,6 +105,7 @@ export default function BoardPage() {
   if (!board) return null
 
   const isAdmin = userId === board.admin_id
+  const ownerViewOnly = isOwnerUser && !isAdmin
   const squareMap = new Map<string, SquareRow>()
   squares.forEach((s) => squareMap.set(`${s.row}-${s.col}`, s))
 
@@ -123,7 +130,7 @@ export default function BoardPage() {
   const liveWinnerSq = liveWinnerKey ? squareMap.get(liveWinnerKey) : undefined
 
   function toggleSquare(r: number, c: number) {
-    if (squareMap.has(`${r}-${c}`) || !canSelect) return
+    if (squareMap.has(`${r}-${c}`) || !canSelect || ownerViewOnly) return
     const key = `${r}-${c}`
     setSelected((prev) => {
       const next = new Set(prev)
@@ -239,6 +246,12 @@ export default function BoardPage() {
 
       {error && <div className="error-box">{error}</div>}
 
+      {ownerViewOnly && (
+        <div className="info-box">
+          👁 You're the platform owner viewing someone else's board — squares can&apos;t be selected here. Visit <Link href="/owner" style={{ color: '#0d47a1', fontWeight: 600 }}>/owner</Link> for the full dashboard.
+        </div>
+      )}
+
       <div style={{
         fontFamily: 'var(--font-bebas), sans-serif', fontSize: 24, letterSpacing: 4,
         color: '#1565c0', textAlign: 'center', padding: 8, background: '#e3f2fd',
@@ -298,7 +311,7 @@ export default function BoardPage() {
                     style={{
                       background: bg, border: `1px solid ${border}`, borderRadius: 2, height: 32,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8,
-                      textAlign: 'center', cursor: sq ? 'pointer' : canSelect ? 'pointer' : 'default', color,
+                      textAlign: 'center', cursor: sq ? 'pointer' : (canSelect && !ownerViewOnly) ? 'pointer' : 'default', color,
                       fontWeight: sq || isSelected ? 600 : 400, overflow: 'hidden', padding: 1,
                       boxShadow: isLiveWinner ? '0 0 0 2px #f9a825 inset' : isHighlighted ? '0 0 0 2px #7b1fa2 inset' : 'none',
                       transform: isLiveWinner || isHighlighted ? 'scale(1.08)' : 'scale(1)',
