@@ -80,6 +80,22 @@ export default function OwnerDashboard() {
     .reduce((sum, s) => sum + s.amount_cents, 0)
   const platformRevenueCents = boards.reduce((sum, b) => sum + (b.platform_fee_cents || 0), 0)
 
+  // status breakdown
+  const statusCounts: Record<string, number> = {}
+  boards.forEach((b) => { statusCounts[b.status] = (statusCounts[b.status] || 0) + 1 })
+
+  // game type popularity
+  const gameTypeCounts: Record<string, number> = {}
+  boards.forEach((b) => { gameTypeCounts[b.game_type] = (gameTypeCounts[b.game_type] || 0) + 1 })
+
+  // money breakdown — paid vs pending, platform-wide
+  const pendingSquares = squares.filter((s) => s.payment_status === 'pending')
+  const pendingCents = pendingSquares.reduce((sum, s) => sum + s.amount_cents, 0)
+
+  // fill rate — how full are active boards on average
+  const totalClaimedInActive = activeBoards.reduce((sum, b) => sum + (squaresByBoard.get(b.id)?.length || 0), 0)
+  const fillRate = activeBoards.length > 0 ? Math.round((totalClaimedInActive / (activeBoards.length * 100)) * 100) : 0
+
   return (
     <div>
       <div className="h1" style={{ marginTop: 12 }}>Owner Dashboard</div>
@@ -107,6 +123,47 @@ export default function OwnerDashboard() {
         </div>
         <div style={{ fontFamily: 'var(--font-bebas), sans-serif', fontSize: 32, color: '#1b5e20' }}>
           ${(platformRevenueCents / 100).toFixed(2)}
+        </div>
+      </div>
+
+      {pendingCents > 0 && (
+        <div className="card" style={{ background: '#fff3e0', border: '1px solid #ffcc80' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#e65100', textTransform: 'uppercase', fontWeight: 600 }}>
+                Awaiting confirmation ({pendingSquares.length} square{pendingSquares.length !== 1 ? 's' : ''})
+              </div>
+              <div style={{ fontFamily: 'var(--font-bebas), sans-serif', fontSize: 24, color: '#e65100' }}>
+                ${(pendingCents / 100).toFixed(2)}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: '#bf360c', maxWidth: 140, textAlign: 'right' }}>
+              Sitting in Venmo/Zelle limbo across all boards — admins haven&apos;t confirmed yet.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="sec">Board status breakdown</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {Object.entries(statusCounts).map(([status, count]) => (
+            <span key={status} className={`badge ${status === 'open' ? 'bg-grn' : status === 'complete' ? 'bg-blue' : status === 'cancelled' ? 'bg-red' : 'bg-org'}`}>
+              {status}: {count}
+            </span>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: '#555f6e', marginTop: 10 }}>
+          Average fill rate across active boards: <strong>{fillRate}%</strong>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="sec">Game type popularity</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {Object.entries(gameTypeCounts).map(([type, count]) => (
+            <span key={type} className="badge bg-blue">{type}: {count}</span>
+          ))}
         </div>
       </div>
 
