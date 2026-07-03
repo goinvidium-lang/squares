@@ -14,6 +14,24 @@ const GT: Record<GameType, { name: string; desc: string; winners: string }> = {
   fullneighbor: { name: 'Full Neighbor', desc: 'Winner + all 8 surrounding squares share the pot.', winners: '9 winners' },
 }
 
+const MG_PATTERNS: Record<GameType, number[]> = {
+  classic:      [0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,0,0, 0,0,0,0,0],
+  reverse:      [0,0,0,0,0, 0,0,0,2,0, 0,0,1,0,0, 0,0,0,0,0, 0,0,0,0,0],
+  cardinal:     [0,0,0,0,0, 0,0,3,0,0, 0,3,1,3,0, 0,0,3,0,0, 0,0,0,0,0],
+  fullneighbor: [0,0,0,0,0, 0,3,3,3,0, 0,3,1,3,0, 0,3,3,3,0, 0,0,0,0,0],
+}
+
+function MiniGrid({ pattern }: { pattern: number[] }) {
+  const colorFor = (v: number) => (v === 1 ? '#1565c0' : v === 2 ? '#ec407a' : v === 3 ? '#42a5f5' : '#e9ecef')
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 8px)', gridTemplateRows: 'repeat(5, 8px)', gap: 1, flexShrink: 0 }}>
+      {pattern.map((v, i) => (
+        <div key={i} style={{ width: 8, height: 8, borderRadius: 1, background: colorFor(v) }} />
+      ))}
+    </div>
+  )
+}
+
 function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
@@ -168,6 +186,7 @@ export default function NewBoardPage() {
               borderRadius: 8, cursor: 'pointer', marginBottom: 6,
             }}
           >
+            <MiniGrid pattern={MG_PATTERNS[key]} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{GT[key].name}</div>
               <div style={{ fontSize: 10, color: '#555f6e', marginTop: 2 }}>{GT[key].desc}</div>
