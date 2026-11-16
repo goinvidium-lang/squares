@@ -172,7 +172,7 @@ function viewJoin() {
 /* ---------- CREATE ---------- */
 /* ---------- CREATE: setup -> verify -> share ---------- */
 let draft = null;
-const newDraft = () => ({ h:'', a:'', p:'10', t:'', v:'private', g:'classic', sp:'finalmore', per:[...SPLITS.finalmore], reverse:false, cross:false, corners:false, main:50 });
+const newDraft = () => ({ h:'', a:'', p:'10', t:'', v:'private', g:'classic', sp:'even', per:[...SPLITS.even], reverse:false, cross:false, corners:false, main:50 });
 const extrasN = d => (d.reverse?1:0) + (d.cross?4:0) + (d.corners?4:0);
 const calc = d => { const p = parseFloat(d.p) || 0, pot = Math.round(p*100)*100, net = pot - PLATFORM_FEE_CENTS, n = extrasN(d), mp = n ? d.main : 100;
   return { pot, net, n, mp, rows: d.per.map((x,i) => { if (!x) return null; const tot = Math.floor(net*x/100), main = Math.floor(tot*mp/100), rest = tot - main; return { label: PERIODS[i], tot, main, each: n ? Math.floor(rest/n) : 0 }; }).filter(Boolean) }; };
@@ -221,7 +221,7 @@ function renderSetup() {
     </div>
     <div class="card"><div class="sec">How much each period pays</div>
       <label class="lbl">Period payouts — is the final worth more?</label>
-      <select class="inp" id="sp"><option value="finalmore">Final worth more — 20 / 20 / 20 / 40</option><option value="even">Even — 25 each quarter</option><option value="final">Final only — 100%</option><option value="custom">Custom…</option></select>
+      <select class="inp" id="sp"><option value="even">Even — 25 each quarter</option><option value="finalmore">Final worth more — 20 / 20 / 20 / 40</option><option value="final">Final only — 100%</option><option value="custom">Custom…</option></select>
       <label class="lbl">% of the pot per period (must total 100)</label>
       <div class="row" id="per">${PERIODS.map((n,i) => `<div><div class="sub" style="margin:0 0 2px;text-align:center">${n}</div><input class="inp" type="number" inputmode="numeric" min="0" max="100" data-i="${i}" style="text-align:center;padding:8px 4px;margin-bottom:0"></div>`).join('')}</div>
       <div class="info" id="pv" style="margin:10px 0 0"></div>
