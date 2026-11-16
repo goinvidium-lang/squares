@@ -320,7 +320,7 @@ async function viewBoard(id) {
 const isOwner = () => B && B.admin_id === me.id;
 function drawBoard() {
   const paid = S.filter(s => s.payment_status === 'paid').length, sold = S.length;
-  const open = B.status === 'open';
+  const open = B.status === 'open' && !B.numbers_drawn;
   const at = {}; S.forEach(s => at[s.row + '-' + s.col] = s);
   const hn = B.home_numbers || [], an = B.away_numbers || [];
   let grid = '<div class="grid"><div></div>' + [...Array(10).keys()].map(c => `<div class="hd">${B.numbers_drawn ? hn[c] : '?'}</div>`).join('');
@@ -342,6 +342,7 @@ function drawBoard() {
     <span class="badge ${B.status==='open'?'grn':B.status==='cancelled'?'red':'org'}">${B.status}</span></div>
     <div class="sub" style="margin-bottom:4px">${esc(rulesText(B.rules))}</div>
     <div class="sub">${paid}/100 paid · ${sold-paid} pending · pot ${money(paid*B.price_cents)}</div>
+    ${countdownHtml(paid, sold)}
     ${B.status==='cancelled' ? '<div class="err">This game was cancelled. Owners handle refunds directly.</div>' : ''}
     <button class="btn out blk sm" style="margin:2px 0 10px;padding:9px" onclick="shareInvite()">📲 Invite friends · code <b style="letter-spacing:2px">${B.code}</b></button>
     <div id="msg"></div><div id="insp"></div>
@@ -366,7 +367,7 @@ function rosterHtml() {
 function ownerPanel(paid, sold) {
   const pend = S.filter(s => s.payment_status === 'pending');
   const byP = new Map(); pend.forEach(s => { const p = byP.get(s.player_id) || { n: s.player?.name || '?', ids: [], m: s.payment_method, amt: 0 }; p.ids.push(s.id); p.amt += s.amount_cents; byP.set(s.player_id, p); });
-  const o = B.status === 'open';
+  const o = B.status === 'open' && !B.numbers_drawn;
   return `<div class="card" style="border:2px solid #ef9a9a"><div class="sec">👑 Owner controls</div>
     ${[...byP.entries()].map(([pid, p]) => p.m === 'cash'
       ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px"><span>${esc(p.n)} · ${p.ids.length} sq · ${money(p.amt)} cash</span><button class="btn dark sm" onclick="confirmIds('${p.ids.join(',')}')">Got cash</button></div>`
@@ -374,14 +375,14 @@ function ownerPanel(paid, sold) {
     ${o ? `<hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
       <button class="btn out blk" style="margin-bottom:8px" onclick="togglePrivacy()">${B.privacy==='private' ? '🌐 Make public (to fill squares)' : '🔒 Make private'}</button>
       ${paid < 100 ? `<div class="sub">${100-paid} squares not paid yet. Still want to play?</div>
-      <div class="row"><button class="btn dark" onclick="drawNumbers()">Start anyway</button><button class="btn out" style="color:#b71c1c" onclick="cancelGame()">Cancel game</button></div>` : ''}` : ''}</div>`;
+      <div class="row"><button class="btn dark" onclick="startAnyway()">Start anyway</button><button class="btn out" style="color:#b71c1c" onclick="cancelGame()">Cancel game</button></div>` : ''}` : ''}</div>`;
 }
 function setMethod(m) { method = m; drawBoard(); }
 function tap(r, c) {
   const s = S.find(x => x.row === r && x.col === c), k = r+'-'+c;
   if (s) { sel.delete(k); drawBoard(); const own = s.player_id === me.id;
     document.getElementById('insp').innerHTML = `<div class="insp"><b>R${r+1} · C${c+1}</b> — ${esc(s.player?.name || 'Unknown')}${own?' (you)':''} · <span class="badge ${s.payment_status==='paid'?'grn':'org'}">${s.payment_status}</span>${B.numbers_drawn ? ` · ${B.home_numbers[c]}/${B.away_numbers[r]}` : ''}</div>`; return; }
-  if (B.status !== 'open') return;
+  if (B.status !== 'open' || B.numbers_drawn) return;
   sel.has(k) ? sel.delete(k) : sel.add(k); drawBoard();
 }
 async function claim() {
@@ -397,11 +398,24 @@ async function confirmIds(ids) {
   if (error) document.getElementById('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
   else if (!B.numbers_drawn && S.filter(s => s.payment_status === 'paid').length === 100) await drawNumbers();
 }
-const shuffle = () => { const a = [...Array(10).keys()]; for (let i = 9; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-async function drawNumbers() {
+function countdownHtml(paid, sold) {
+  if (B.status === 'cancelled') return '';
+  if (B.numbers_drawn) return `<div class="info" style="background:#e8f5e9;border-color:#a5d6a7;color:#1b5e20;text-align:center">🔒 <b>Numbers are revealed — no more squares can be sold.</b></div>`;
+  const left = 100 - paid, big = left > 25;
+  const head = big ? `<b>${left} squares to go</b> until the numbers are revealed` : left === 1 ? `<b>Only 1 more square</b>, then the numbers are revealed!` : `<b>Only ${left} more squares</b>, then the numbers are revealed!`;
+  return `<div class="info" style="text-align:center">🎲 ${head}<div style="font-size:11px;margin-top:3px;opacity:.85">${100-sold} still open · ${sold-paid} waiting on payment · numbers are drawn randomly once all 100 are paid</div></div>`;
+}
+async function drawNumbers() {   // auto path: only succeeds when all 100 are paid
   if (!B || B.numbers_drawn) return;
-  await sb.from('boards').update({ numbers_drawn: true, home_numbers: shuffle(), away_numbers: shuffle(), status: 'live' }).eq('id', B.id).eq('numbers_drawn', false);
+  await sb.rpc('reveal_numbers', { p_board: B.id, p_force: false });
   await loadBoard(B.id); drawBoard();
+}
+async function startAnyway() {
+  const paid = S.filter(s => s.payment_status === 'paid').length, pend = S.filter(s => s.payment_status === 'pending').length;
+  if (!confirm(`Start the game with ${paid} paid squares?\n\nOnce the numbers are revealed, NO more squares can be sold. This can't be undone.` + (pend ? `\n\n${pend} unpaid reserved square${pend>1?'s':''} will be released.` : ''))) return;
+  const { error } = await sb.rpc('reveal_numbers', { p_board: B.id, p_force: true });
+  await loadBoard(B.id); drawBoard();
+  if (error) document.getElementById('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
 }
 async function cancelGame() {
   if (!confirm('Cancel this game? You will need to refund players yourself.')) return;
