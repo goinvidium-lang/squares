@@ -41,6 +41,14 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,sans-
 .pm.on{border-color:var(--accent);background:#e3f2fd;color:#0d47a1}
 a{color:var(--accent)}
 .sec{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+.mini{display:grid;grid-template-columns:16px repeat(10,1fr);gap:2px;max-width:280px;margin:0 auto}
+.mh{font-size:8px;color:var(--muted2);display:flex;align-items:center;justify-content:center}
+.mc{aspect-ratio:1;border-radius:3px;background:#eef0f3;border:1px solid #d5d9df;transition:all .3s}
+.mc.on{transform:scale(1.15);border-color:transparent}
+.mc.w{background:#f9a825}.mc.r{background:#8e24aa}.mc.x{background:#1e88e5}.mc.k{background:#26a69a}
+.lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;margin:2px 10px 2px 0}.lg i{width:12px;height:12px;display:inline-block}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:5px 0;border-bottom:1px solid #eef0f3}.kv:last-child{border:0}.kv span:first-child{color:var(--muted)}
+.code{font-family:'Bebas Neue',sans-serif;font-size:56px;letter-spacing:8px;text-align:center;margin:6px 0}
 </style>
 </head>
 <body>
@@ -63,16 +71,12 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const genCode = () => Array.from({length:6}, () => CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)]).join('');
 const METHODS = { venmo:'Venmo', zelle:'Zelle', cashapp:'Cash App', cash:'Cash (to owner)' };
 const TYPES = { classic:'Classic', reverse:'Reverse', cardinal:'Cross', fullneighbor:'Full Neighbor', custom:'Custom' };
-const PRESETS = {
-  classic:{ per:[20,20,20,40], reverse:false, cross:false, corners:false },
-  reverse:{ per:[20,20,20,40], reverse:true, cross:false, corners:false },
-  cardinal:{ per:[20,20,20,40], reverse:false, cross:true, corners:false },
-  fullneighbor:{ per:[20,20,20,40], reverse:false, cross:true, corners:true },
-  finalrev:{ per:[0,0,0,100], reverse:true, cross:false, corners:false }
-};
+const EXTRAS = { classic:{reverse:false,cross:false,corners:false}, reverse:{reverse:true,cross:false,corners:false}, cardinal:{reverse:false,cross:true,corners:false}, fullneighbor:{reverse:false,cross:true,corners:true} };
+const SPLITS = { even:[25,25,25,25], finalmore:[20,20,20,40], final:[0,0,0,100] };
 const PERIODS = ['Q1','Q2 (half)','Q3','Final'];
 const rulesText = r => { if(!r) return ''; const p = r.periods||{}; const on = ['q1','q2','q3','q4'].map((k,i)=>p[k]?`${PERIODS[i]} ${p[k]}%`:null).filter(Boolean).join(' · ');
-  const w = ['winning square', r.reverse&&'reverse', r.cross&&'up/down/left/right', r.corners&&'diagonal corners'].filter(Boolean).join(' + '); return `${on} — ${w}`; };
+  const ex = [r.reverse&&'reverse', r.cross&&'up/down/left/right', r.corners&&'diagonal corners'].filter(Boolean);
+  return `${on} — winner${ex.length ? ' gets ' + (r.main_pct||50) + '%, ' + ex.join(' + ') + ' share the rest' : ' takes all'}`; };
 let me = null, profile = null;
 const go = p => { location.hash = '#' + p; };
 
@@ -166,54 +170,133 @@ function viewJoin() {
 }
 
 /* ---------- CREATE ---------- */
-function viewNew() {
-  $app.innerHTML = `<div class="h1">New board</div><div class="sub">You'll text the invite link to your players</div><div id="msg"></div>
+/* ---------- CREATE: setup -> verify -> share ---------- */
+let draft = null;
+const newDraft = () => ({ h:'', a:'', p:'10', t:'', v:'private', g:'classic', sp:'finalmore', per:[...SPLITS.finalmore], reverse:false, cross:false, corners:false, main:50 });
+const extrasN = d => (d.reverse?1:0) + (d.cross?4:0) + (d.corners?4:0);
+const calc = d => { const p = parseFloat(d.p) || 0, pot = Math.round(p*100)*100, net = pot - PLATFORM_FEE_CENTS, n = extrasN(d), mp = n ? d.main : 100;
+  return { pot, net, n, mp, rows: d.per.map((x,i) => { if (!x) return null; const tot = Math.floor(net*x/100), main = Math.floor(tot*mp/100), rest = tot - main; return { label: PERIODS[i], tot, main, each: n ? Math.floor(rest/n) : 0 }; }).filter(Boolean) }; };
+const payoutHtml = d => { const c = calc(d); return c.rows.map(r => `<div style="margin-top:4px">${r.label} <span style="opacity:.7">(${money(r.tot)} total)</span>: winner <b>${money(r.main)}</b>${c.n ? ` · each of ${c.n} extra: <b>${money(r.each)}</b>` : ''}</div>`).join(''); };
+const MH = [4,0,8,2,9,6,3,7,1,5], MA = [1,9,0,7,4,5,3,8,2,6], MW = [3,6], MR = [6,7];
+function miniBoardHtml() {
+  let h = '<div class="mini"><div></div>' + MH.map(x => `<div class="mh">${x}</div>`).join('');
+  for (let r = 0; r < 10; r++) { h += `<div class="mh">${MA[r]}</div>`; for (let c = 0; c < 10; c++) h += `<div class="mc" data-k="${r}-${c}"></div>`; }
+  return h + '</div>';
+}
+function paintMini(d, root) {
+  const roles = {}; roles[MW.join('-')] = 'w'; if (d.reverse) roles[MR.join('-')] = 'r';
+  const [wr, wc] = MW;
+  if (d.cross) [[-1,0],[1,0],[0,-1],[0,1]].forEach(([a,b]) => roles[(wr+a)+'-'+(wc+b)] = 'x');
+  if (d.corners) [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([a,b]) => roles[(wr+a)+'-'+(wc+b)] = 'k');
+  root.querySelectorAll('.mini .mc').forEach(el => { el.className = 'mc' + (roles[el.dataset.k] ? ' on ' + roles[el.dataset.k] : ''); });
+}
+const legendHtml = d => { const it = [['w','Winning square']]; if (d.reverse) it.push(['r','Reverse']); if (d.cross) it.push(['x','Up / down / left / right']); if (d.corners) it.push(['k','Diagonal corners']);
+  return it.map(([k,t]) => `<span class="lg"><i class="mc on ${k}"></i>${t}</span>`).join(''); };
+
+function viewNew() { if (!draft) draft = newDraft(); renderSetup(); }
+function renderSetup() {
+  const d = draft;
+  $app.innerHTML = `<div class="h1">New board</div><div class="sub">Step 1 of 3 · Set up the game</div><div id="msg"></div>
     <div class="card">
       <div class="row"><div><label class="lbl">Home team</label><input class="inp" id="h" placeholder="Dragons"></div><div><label class="lbl">Away team</label><input class="inp" id="a" placeholder="Tigers"></div></div>
-      <div class="row"><div><label class="lbl">Price / square ($)</label><input class="inp" id="p" type="number" inputmode="decimal" value="10"></div>
+      <div class="row"><div><label class="lbl">Price / square ($)</label><input class="inp" id="p" type="number" inputmode="decimal"></div>
       <div><label class="lbl">Game date & time</label><input class="inp" id="t" type="datetime-local"></div></div>
-      <label class="lbl">Privacy</label><select class="inp" id="v"><option value="private">Private — invite link only</option><option value="public">Public — anyone can find it</option></select>
+      <label class="lbl">Privacy</label><select class="inp" id="v" style="margin-bottom:0"><option value="private">Private — invite link only</option><option value="public">Public — anyone can find it</option></select>
     </div>
-    <div class="card"><div class="sec">How the game pays</div>
+    <div class="card"><div class="sec">Who wins each period</div>
       <label class="lbl">Game type</label>
-      <select class="inp" id="g"><option value="classic">Classic — Q1, Q2, Q3, Final</option><option value="reverse">Reverse — also pays reversed numbers</option>
-        <option value="cardinal">Cross — also up/down/left/right squares</option><option value="fullneighbor">Full Neighbor — cross + diagonal corners</option>
-        <option value="finalrev">Final only + reverse</option><option value="custom">Custom…</option></select>
-      <label class="lbl">% of the pot paid each period (must total 100)</label>
-      <div class="row" id="per">${PERIODS.map((n,i)=>`<div><div class="sub" style="margin:0 0 2px;text-align:center">${n}</div><input class="inp" type="number" inputmode="numeric" min="0" max="100" data-i="${i}" style="text-align:center;padding:8px 4px"></div>`).join('')}</div>
-      <label style="display:flex;gap:8px;font-size:13px;margin:2px 0 8px"><input type="checkbox" id="rv"> Also pay the <b>reverse</b> numbers</label>
-      <label style="display:flex;gap:8px;font-size:13px;margin:0 0 8px"><input type="checkbox" id="cr"> Also pay the squares <b>up, down, left &amp; right</b> of the winner</label>
-      <label style="display:flex;gap:8px;font-size:13px;margin:0 0 10px"><input type="checkbox" id="co"> Also pay the <b>four diagonal corners</b> around the winner</label>
-      <div class="info" id="pv" style="margin-bottom:0"></div>
+      <select class="inp" id="g"><option value="classic">Classic — winning square only</option><option value="reverse">Reverse — also pays the reversed numbers</option>
+        <option value="cardinal">Cross — also pays up / down / left / right</option><option value="fullneighbor">Full Neighbor — cross + diagonal corners</option><option value="custom">Custom…</option></select>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:2px 0 8px"><input type="checkbox" id="rv"><span>Also pay the <b>reverse</b> numbers</span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:0 0 8px"><input type="checkbox" id="cr"><span>Also pay the squares <b>up, down, left &amp; right</b> of the winner</span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:0 0 10px"><input type="checkbox" id="co"><span>Also pay the <b>four diagonal corners</b> around the winner</span></label>
+      <div id="mainrow" style="display:none"><label class="lbl">Winning square gets (% of each period)</label>
+        <input class="inp" type="number" inputmode="numeric" min="1" max="100" id="mn" style="margin-bottom:2px"><div class="sub" style="margin:0 0 10px">The rest is split evenly among the extra squares.</div></div>
+      <div style="background:#f6f7f9;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px">
+        <div class="lbl" style="text-align:center">How it looks on a board</div>
+        ${miniBoardHtml()}
+        <div id="lg" style="margin-top:8px;text-align:center"></div>
+        <div class="sub" style="text-align:center;margin:6px 0 0;font-size:11px">Example: home score ends in 3, away ends in 7. Columns = home digit, rows = away digit.</div>
+      </div>
     </div>
-    <button class="btn dark blk" id="mk">Create board</button>`;
+    <div class="card"><div class="sec">How much each period pays</div>
+      <label class="lbl">Period payouts — is the final worth more?</label>
+      <select class="inp" id="sp"><option value="finalmore">Final worth more — 20 / 20 / 20 / 40</option><option value="even">Even — 25 each quarter</option><option value="final">Final only — 100%</option><option value="custom">Custom…</option></select>
+      <label class="lbl">% of the pot per period (must total 100)</label>
+      <div class="row" id="per">${PERIODS.map((n,i) => `<div><div class="sub" style="margin:0 0 2px;text-align:center">${n}</div><input class="inp" type="number" inputmode="numeric" min="0" max="100" data-i="${i}" style="text-align:center;padding:8px 4px;margin-bottom:0"></div>`).join('')}</div>
+      <div class="info" id="pv" style="margin:10px 0 0"></div>
+    </div>
+    <button class="btn dark blk" id="mk">Confirm selections →</button>`;
   const $ = id => document.getElementById(id), inputs = [...document.querySelectorAll('#per input')];
-  const read = () => ({ per: inputs.map(i => parseInt(i.value) || 0), reverse: $('rv').checked, cross: $('cr').checked, corners: $('co').checked });
-  const apply = pr => { inputs.forEach((i,k) => i.value = pr.per[k]); $('rv').checked = pr.reverse; $('cr').checked = pr.cross; $('co').checked = pr.corners; };
-  const count = r => (1 + (r.cross?4:0) + (r.corners?4:0)) * (r.reverse?2:1);
-  const preview = () => {
-    const r = read(), tot = r.per.reduce((a,b)=>a+b,0), p = parseFloat($('p').value) || 0, pot = Math.round(p*100)*100, net = pot - PLATFORM_FEE_CENTS, n = count(r);
-    $('pv').innerHTML = `<b>Payout per winning square</b> (${n} winning square${n>1?'s':''} per period)<br>` +
-      r.per.map((x,i)=> x ? `${PERIODS[i]}: <b>${money(Math.floor(net*x/100/n))}</b> <span style="opacity:.7">(${money(Math.floor(net*x/100))} total)</span>` : '').filter(Boolean).join('<br>') +
-      `<div style="font-size:11px;margin-top:6px;opacity:.85">Full board ${money(pot)} − ${money(PLATFORM_FEE_CENTS)} platform fee = ${money(net)} paid out. Each period's money is split evenly among its winning squares (edges wrap around; if two winners are the same square it collects both shares).${tot!==100?`<br><b style="color:#b71c1c">Percentages total ${tot}% — must be 100%.</b>`:''}</div>`;
-    $('mk').disabled = tot !== 100;
+  const fill = () => { $('h').value = d.h; $('a').value = d.a; $('p').value = d.p; $('t').value = d.t; $('v').value = d.v; $('g').value = d.g; $('sp').value = d.sp;
+    inputs.forEach((i,k) => i.value = d.per[k]); $('rv').checked = d.reverse; $('cr').checked = d.cross; $('co').checked = d.corners; $('mn').value = d.main; };
+  const read = () => { d.h = $('h').value; d.a = $('a').value; d.p = $('p').value; d.t = $('t').value; d.v = $('v').value; d.g = $('g').value; d.sp = $('sp').value;
+    d.per = inputs.map(i => parseInt(i.value) || 0); d.reverse = $('rv').checked; d.cross = $('cr').checked; d.corners = $('co').checked; d.main = Math.min(99, Math.max(1, parseInt($('mn').value) || 50)); };
+  const preview = () => { read(); const c = calc(d), tot = d.per.reduce((x,y) => x+y, 0);
+    $('mainrow').style.display = c.n ? 'block' : 'none'; paintMini(d, $app); $('lg').innerHTML = legendHtml(d);
+    $('pv').innerHTML = `<b>Payout per winning square</b>` + payoutHtml(d) +
+      `<div style="font-size:11px;margin-top:6px;opacity:.85">Full board ${money(c.pot)} − ${money(PLATFORM_FEE_CENTS)} platform fee = ${money(c.net)} paid out.${tot!==100 ? `<br><b style="color:#b71c1c">Percentages total ${tot}% — must be 100%.</b>` : ''}</div>`;
+    $('mk').disabled = tot !== 100; };
+  fill(); preview();
+  $('g').addEventListener('change', () => { if ($('g').value !== 'custom') { const e = EXTRAS[$('g').value]; $('rv').checked = e.reverse; $('cr').checked = e.cross; $('co').checked = e.corners; } preview(); });
+  $('sp').addEventListener('change', () => { if ($('sp').value !== 'custom') inputs.forEach((i,k) => i.value = SPLITS[$('sp').value][k]); preview(); });
+  inputs.forEach(el => el.addEventListener('input', () => { $('sp').value = 'custom'; preview(); }));
+  [$('rv'), $('cr'), $('co'), $('mn')].forEach(el => el.addEventListener('input', () => { $('g').value = 'custom'; preview(); }));
+  ['h','a','p','t','v'].forEach(i => $(i).addEventListener('input', preview));
+  $('mk').onclick = () => {
+    read();
+    if (!d.h.trim() || !d.a.trim() || !(parseFloat(d.p) > 0)) { $('msg').innerHTML = '<div class="err">Enter both teams and a price.</div>'; window.scrollTo(0,0); return; }
+    renderVerify();
   };
-  $('g').addEventListener('change', () => { if ($('g').value !== 'custom') apply(PRESETS[$('g').value]); preview(); });
-  [...inputs, $('rv'), $('cr'), $('co')].forEach(el => el.addEventListener('input', () => { $('g').value = 'custom'; preview(); }));
-  $('p').addEventListener('input', preview);
-  apply(PRESETS.classic); preview();
-  $('mk').onclick = async () => {
-    const h = $('h').value.trim(), a = $('a').value.trim(), p = parseFloat($('p').value), t = $('t').value, r = read();
-    if (!h || !a || !(p > 0)) { $('msg').innerHTML = '<div class="err">Enter both teams and a price.</div>'; return; }
-    const rules = { periods: { q1:r.per[0], q2:r.per[1], q3:r.per[2], q4:r.per[3] }, reverse:r.reverse, cross:r.cross, corners:r.corners, wrap:true };
-    const gt = ['classic','reverse','cardinal','fullneighbor'].includes($('g').value) ? $('g').value : 'custom';
+}
+function renderVerify() {
+  const d = draft, c = calc(d), kv = (k, v) => `<div class="kv"><span>${k}</span><span style="text-align:right"><b>${v}</b></span></div>`;
+  $app.innerHTML = `<div class="h1">Verify your board</div><div class="sub">Step 2 of 3 · Last check — the rules are locked once the board is created</div><div id="msg"></div>
+    <div class="card"><div class="sec">Game</div>
+      ${kv('Matchup', esc(d.h) + ' vs ' + esc(d.a))}
+      ${kv('Game time', d.t ? new Date(d.t).toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Not set')}
+      ${kv('Price per square', money(Math.round(parseFloat(d.p)*100)))}
+      ${kv('Full board', money(c.pot))}
+      ${kv('Platform fee', money(PLATFORM_FEE_CENTS))}
+      ${kv('Paid out to winners', money(c.net))}
+      ${kv('Privacy', d.v === 'private' ? '🔒 Private (invite only)' : '🌐 Public')}</div>
+    <div class="card"><div class="sec">How it pays</div>
+      <div style="background:#f6f7f9;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">${miniBoardHtml()}<div style="margin-top:8px;text-align:center">${legendHtml(d)}</div></div>
+      <div style="font-size:13px">${payoutHtml(d)}</div></div>
+    <label style="display:flex;gap:10px;font-size:13px;margin:12px 2px;align-items:flex-start"><input type="checkbox" id="ok" style="margin-top:3px"> I've checked the teams, price and payouts. I understand the rules can't be changed after players join.</label>
+    <button class="btn dark blk" id="cf" disabled>Confirm &amp; create board</button>
+    <button class="btn out blk" id="bk" style="margin-top:8px">← Edit</button>`;
+  paintMini(d, $app);
+  const $ = id => document.getElementById(id);
+  $('ok').onchange = () => $('cf').disabled = !$('ok').checked;
+  $('bk').onclick = renderSetup;
+  $('cf').onclick = async () => {
+    $('cf').disabled = true;
+    const rules = { periods: { q1:d.per[0], q2:d.per[1], q3:d.per[2], q4:d.per[3] }, reverse:d.reverse, cross:d.cross, corners:d.corners, main_pct: extrasN(d) ? d.main : 100, wrap:true };
+    const gt = ['classic','reverse','cardinal','fullneighbor'].includes(d.g) ? d.g : 'custom';
     for (let i = 0; i < 5; i++) {
-      const { data, error } = await sb.from('boards').insert({ code: genCode(), admin_id: me.id, home_team: h, away_team: a, price_cents: Math.round(p*100),
-        game_type: gt, privacy: $('v').value, rules, game_time: t ? new Date(t).toISOString() : null, status: 'open' }).select().single();
-      if (!error) { go('/b/' + data.id); return; }
-      if (error.code !== '23505') { $('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+      const { data, error } = await sb.from('boards').insert({ code: genCode(), admin_id: me.id, home_team: d.h.trim(), away_team: d.a.trim(), price_cents: Math.round(parseFloat(d.p)*100),
+        game_type: gt, privacy: d.v, rules, game_time: d.t ? new Date(d.t).toISOString() : null, status: 'open' }).select().single();
+      if (!error) { draft = null; return renderCreated(data); }
+      if (error.code !== '23505') { $('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; $('cf').disabled = false; return; }
     }
   };
+}
+const inviteUrl = code => location.origin + location.pathname + '?join=' + code;
+function renderCreated(b) {
+  $app.innerHTML = `<div style="text-align:center;padding-top:10px"><div style="font-size:44px">🎉</div><div class="h1" style="font-size:30px">Your board is live</div>
+    <div class="sub">Step 3 of 3 · Send this to your players</div></div><div id="msg"></div>
+    <div class="card" style="text-align:center"><div class="sub" style="margin:0">${esc(b.home_team)} vs ${esc(b.away_team)}</div><div class="code">${b.code}</div>
+      <div style="font-size:11px;color:var(--muted);word-break:break-all;margin-bottom:12px">${inviteUrl(b.code)}</div>
+      <button class="btn dark blk" onclick="shareCode('${b.code}','${esc(b.home_team).replace(/'/g,'')}','${esc(b.away_team).replace(/'/g,'')}')">📲 Text / share invite link</button>
+      <div class="row" style="margin-top:8px"><button class="btn out" onclick="copyTxt('${inviteUrl(b.code)}','Link copied')">Copy link</button><button class="btn out" onclick="copyTxt('${b.code}','Code copied')">Copy code</button></div></div>
+    <button class="btn out blk" onclick="go('/b/${b.id}')">Open my board →</button>`;
+}
+async function copyTxt(t, m) { try { await navigator.clipboard.writeText(t); document.getElementById('msg').innerHTML = `<div class="info">${m}</div>`; } catch(e) { prompt('Copy this:', t); } }
+async function shareCode(code, h, a) {
+  const url = inviteUrl(code), text = `Join my squares board: ${h} vs ${a}`;
+  if (navigator.share) { try { await navigator.share({ title: 'Gridiron Squares', text, url }); } catch(e) {} return; }
+  copyTxt(url, 'Invite link copied. Paste it in a text.');
 }
 
 /* ---------- BOARD ---------- */
@@ -326,11 +409,7 @@ async function cancelGame() {
 async function togglePrivacy() {
   await sb.from('boards').update({ privacy: B.privacy === 'private' ? 'public' : 'private' }).eq('id', B.id); await loadBoard(B.id); drawBoard();
 }
-async function shareInvite() {
-  const url = location.origin + location.pathname + '?join=' + B.code, text = `Join my squares board: ${B.home_team} vs ${B.away_team}`;
-  if (navigator.share) { try { await navigator.share({ title: 'Gridiron Squares', text, url }); return; } catch(e){ return; } }
-  try { await navigator.clipboard.writeText(url); document.getElementById('msg').innerHTML = '<div class="info">Invite link copied. Paste it in a text.</div>'; } catch(e){ prompt('Copy this link:', url); }
-}
+function shareInvite() { shareCode(B.code, B.home_team, B.away_team); }
 
 /* ---------- PLATFORM ADMIN: confirm central-account payments ---------- */
 async function viewAdmin() {
