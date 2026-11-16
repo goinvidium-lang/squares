@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gridiron Squares</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#dde1e7;--border:#b0b8c1;--bi:#9aa3ad;--ink:#1a1a1a;--muted:#555f6e;--muted2:#6c757d;--accent:#1565c0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,sans-serif;min-height:100vh;-webkit-text-size-adjust:100%}
+#nav{position:fixed;top:0;left:0;right:0;z-index:50;background:#fff;border-bottom:2px solid var(--border);height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--ink);text-decoration:none;cursor:pointer}
+#app{max-width:480px;margin:0 auto;padding:68px 16px 40px}
+.h1{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;margin:0 0 2px}
+.sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+.lbl{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin:0 0 4px;font-weight:600;display:block}
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.inp{background:#fff;border:1.5px solid var(--bi);border-radius:6px;padding:10px;font-size:16px;font-family:inherit;width:100%;outline:none;margin-bottom:10px}
+.inp:focus{border-color:var(--accent)}
+.btn{font:500 14px Inter,sans-serif;padding:11px 16px;border-radius:8px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn:disabled{opacity:.5}
+.dark{background:var(--ink);color:#fff}.out{background:#fff;border-color:var(--bi);color:var(--muted)}
+.blk{width:100%}.sm{font-size:12px;padding:6px 12px}
+.badge{display:inline-flex;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
+.grn{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}.red{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
+.org{background:#fff3e0;color:#bf360c;border:1px solid #ffcc80}.blue{background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9}
+.err{background:#ffebee;border:1px solid #ef9a9a;color:#c62828;border-radius:6px;padding:9px 12px;font-size:13px;margin-bottom:10px}
+.info{background:#e3f2fd;border:1px solid #90caf9;color:#0d47a1;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:10px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.gridwrap{overflow-x:auto}
+.grid{display:grid;grid-template-columns:22px repeat(10,1fr);gap:2px;min-width:300px}
+.cell{aspect-ratio:1;border-radius:4px;border:1.5px solid var(--bi);background:#fff;font-size:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;padding:0;color:var(--muted)}
+.hd{font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.t-paid{background:#fff3e0;border-color:#ffcc80;color:#bf360c}.t-pend{background:#fffde7;border-color:#fff176;color:#f9a825}
+.t-me{background:#e8f5e9;border-color:#a5d6a7;color:#2e7d32}.t-sel{background:#1565c0;border-color:#0d47a1;color:#fff}
+.insp{background:#f3e5f5;border:1px solid #ce93d8;color:#4a148c;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:10px}
+.bar{position:sticky;bottom:0;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;box-shadow:0 -2px 10px rgba(0,0,0,.12);margin-top:10px}
+.pm{padding:10px;border:1.5px solid var(--bi);border-radius:8px;text-align:center;font-size:12px;font-weight:600;background:#fff;cursor:pointer}
+.pm.on{border-color:var(--accent);background:#e3f2fd;color:#0d47a1}
+a{color:var(--accent)}
+.sec{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+</style>
+</head>
+<body>
+<div id="nav"><a class="logo" onclick="go('/')">🏈 Gridiron Squares</a><div id="navr"></div></div>
+<div id="app"></div>
+<script>
+/* ====== CONFIG: paste your values ====== */
+const SUPABASE_URL = 'PASTE_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'PASTE_SUPABASE_ANON_KEY';
+// Central account players pay for Venmo / Zelle / Cash App (cash goes to the board owner)
+const PAY = { venmo:'@your-venmo', zelle:'you@example.com', cashapp:'$your-cashapp' };
+/* ======================================= */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $app = document.getElementById('app'), $navr = document.getElementById('navr');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = c => '$' + (c/100).toFixed(c%100 ? 2 : 0);
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const genCode = () => Array.from({length:6}, () => CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)]).join('');
+const METHODS = { venmo:'Venmo', zelle:'Zelle', cashapp:'Cash App', cash:'Cash (to owner)' };
+const TYPES = { classic:'Classic', reverse:'Reverse', cardinal:'Cardinal', fullneighbor:'Full Neighbor' };
+let me = null, profile = null;
+const go = p => { location.hash = '#' + p; };
+
+// invite link: /?join=CODE
+const qp = new URLSearchParams(location.search);
+if (qp.get('join')) { try { localStorage.setItem('pendingJoin', qp.get('join').toUpperCase()); } catch(e){} history.replaceState({}, '', location.pathname + location.hash); }
+const pending = () => { try { return localStorage.getItem('pendingJoin'); } catch(e){ return null; } };
+const clearPending = () => { try { localStorage.removeItem('pendingJoin'); } catch(e){} };
+
+async function ensureProfile(user, name) {
+  let { data } = await sb.from('users').select('*').eq('id', user.id).maybeSingle();
+  if (!data) {
+    const nm = name || user.user_metadata?.name || user.email.split('@')[0];
+    await sb.from('users').insert({ id: user.id, name: nm, email: user.email });
+    ({ data } = await sb.from('users').select('*').eq('id', user.id).maybeSingle());
+  }
+  return data;
+}
+function renderNav() {
+  $navr.innerHTML = me ? `${profile?.is_owner ? '<button class="btn out sm" onclick="go(\'/admin\')">Admin</button> ' : ''}<button class="btn out sm" onclick="go(\'/\')">Home</button> <button class="btn out sm" onclick="logout()">Log out</button>` : '';
+}
+async function logout() { await sb.auth.signOut(); me = profile = null; renderNav(); route(); }
+
+/* ---------- AUTH ---------- */
+function viewAuth(mode = 'signup') {
+  const invited = pending();
+  $app.innerHTML = `
+    <div style="text-align:center;padding:14px 0"><div style="font-size:40px">🏈</div>
+    <div class="h1" style="font-size:32px">${mode==='signup' ? 'Create your account' : 'Welcome back'}</div>
+    <div class="sub">${invited ? "You're invited to a squares board — sign up to pick your squares" : 'Football squares with your friends'}</div></div>
+    <div id="msg"></div>
+    <div class="card">
+      ${mode==='signup' ? '<label class="lbl">Your name</label><input class="inp" id="nm" autocomplete="name" placeholder="e.g. Kim Cox">' : ''}
+      <label class="lbl">Email</label><input class="inp" id="em" type="email" autocomplete="email" placeholder="you@example.com">
+      <label class="lbl">Password</label><input class="inp" id="pw" type="password" autocomplete="${mode==='signup'?'new-password':'current-password'}" placeholder="At least 6 characters">
+      <button class="btn dark blk" id="go">${mode==='signup' ? 'Sign up & continue' : 'Log in'}</button>
+    </div>
+    <div style="text-align:center;font-size:13px;color:var(--muted)">${mode==='signup' ? 'Have an account?' : 'New here?'}
+      <a href="#" onclick="viewAuth('${mode==='signup'?'login':'signup'}');return false">${mode==='signup'?'Log in':'Sign up'}</a></div>`;
+  document.getElementById('go').onclick = async () => {
+    const em = document.getElementById('em').value.trim(), pw = document.getElementById('pw').value;
+    const nm = document.getElementById('nm')?.value.trim();
+    const msg = document.getElementById('msg');
+    if (!em || !pw || (mode==='signup' && !nm)) { msg.innerHTML = '<div class="err">Fill in every field.</div>'; return; }
+    if (pw.length < 6) { msg.innerHTML = '<div class="err">Password must be at least 6 characters.</div>'; return; }
+    document.getElementById('go').disabled = true;
+    let r;
+    if (mode === 'signup') r = await sb.auth.signUp({ email: em, password: pw, options: { data: { name: nm } } });
+    else r = await sb.auth.signInWithPassword({ email: em, password: pw });
+    if (r.error) { msg.innerHTML = `<div class="err">${esc(r.error.message)}</div>`; document.getElementById('go').disabled = false; return; }
+    if (!r.data.session) { msg.innerHTML = '<div class="info">Check your email to confirm your account, then log in.</div>'; document.getElementById('go').disabled = false; return; }
+    me = r.data.user; profile = await ensureProfile(me, nm); renderNav(); route();
+  };
+}
+
+/* ---------- DASHBOARD ---------- */
+async function viewHome() {
+  $app.innerHTML = '<div class="sub">Loading…</div>';
+  const code = pending();
+  if (code) { clearPending(); return joinByCode(code); }
+  const [{ data: mine }, { data: sq }] = await Promise.all([
+    sb.from('boards').select('*').eq('admin_id', me.id).order('created_at', { ascending: false }),
+    sb.from('squares').select('board_id, payment_status, boards(id,code,home_team,away_team,status,price_cents,admin_id)').eq('player_id', me.id)
+  ]);
+  const played = new Map();
+  (sq || []).forEach(s => { if (!s.boards || s.boards.admin_id === me.id) return; const p = played.get(s.board_id) || { b: s.boards, n: 0 }; p.n++; played.set(s.board_id, p); });
+  const stBadge = s => `<span class="badge ${s==='open'?'grn':s==='cancelled'?'red':s==='complete'?'blue':'org'}">${s}</span>`;
+  $app.innerHTML = `
+    <div class="h1">Hey ${esc(profile?.name?.split(' ')[0] || '')} 👋</div><div class="sub">Your boards</div>
+    <div class="row" style="margin-bottom:14px"><button class="btn dark" onclick="go('/new')">+ Create a board</button><button class="btn out" onclick="go('/join')">🔑 Join with code</button></div>
+    ${(mine||[]).length ? '<div class="sec">Boards you run</div>' : ''}
+    ${(mine||[]).map(b => `<div class="card" style="border:2px solid #ef9a9a;cursor:pointer" onclick="go('/b/${b.id}')"><div style="display:flex;justify-content:space-between"><b>${esc(b.home_team)} vs ${esc(b.away_team)}</b><span class="badge red">👑 Owner</span></div>
+      <div class="sub" style="margin:4px 0 0">${money(b.price_cents)}/sq · code ${b.code} · ${stBadge(b.status)} · ${b.privacy}</div></div>`).join('')}
+    ${played.size ? '<div class="sec" style="margin-top:12px">Boards you play in</div>' : ''}
+    ${[...played.values()].map(p => `<div class="card" style="border:2px solid #a5d6a7;cursor:pointer" onclick="go('/b/${p.b.id}')"><b>${esc(p.b.home_team)} vs ${esc(p.b.away_team)}</b>
+      <div class="sub" style="margin:4px 0 0">${p.n} square${p.n>1?'s':''} · ${stBadge(p.b.status)}</div></div>`).join('')}
+    ${!(mine||[]).length && !played.size ? '<div class="info">No boards yet. Create one and text the invite link to your friends, or join with a code.</div>' : ''}`;
+}
+
+/* ---------- JOIN ---------- */
+async function joinByCode(code) {
+  const { data: b } = await sb.from('boards').select('id,status').eq('code', code.trim().toUpperCase()).maybeSingle();
+  if (!b) { go('/join'); setTimeout(() => { const m = document.getElementById('msg'); if (m) m.innerHTML = '<div class="err">No board found with that code.</div>'; }, 150); return; }
+  go('/b/' + b.id);
+}
+function viewJoin() {
+  $app.innerHTML = `<div class="h1">Join a board</div><div class="sub">Enter the 6-character code</div><div id="msg"></div>
+    <div class="card"><input class="inp" id="c" maxlength="6" placeholder="ABC123" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:22px">
+    <button class="btn dark blk" id="j">Find board</button></div>`;
+  document.getElementById('j').onclick = () => joinByCode(document.getElementById('c').value);
+}
+
+/* ---------- CREATE ---------- */
+function viewNew() {
+  $app.innerHTML = `<div class="h1">New board</div><div class="sub">You'll text the invite link to your players</div><div id="msg"></div>
+    <div class="card">
+      <div class="row"><div><label class="lbl">Home team</label><input class="inp" id="h" placeholder="Dragons"></div><div><label class="lbl">Away team</label><input class="inp" id="a" placeholder="Tigers"></div></div>
+      <div class="row"><div><label class="lbl">Price / square ($)</label><input class="inp" id="p" type="number" inputmode="decimal" value="10"></div>
+      <div><label class="lbl">Game date & time</label><input class="inp" id="t" type="datetime-local"></div></div>
+      <label class="lbl">Game type</label><select class="inp" id="g">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
+      <label class="lbl">Privacy</label><select class="inp" id="v"><option value="private">Private — invite link only</option><option value="public">Public — anyone can find it</option></select>
+      <button class="btn dark blk" id="mk">Create board</button></div>`;
+  document.getElementById('mk').onclick = async () => {
+    const h = document.getElementById('h').value.trim(), a = document.getElementById('a').value.trim(), p = parseFloat(document.getElementById('p').value);
+    if (!h || !a || !(p > 0)) { document.getElementById('msg').innerHTML = '<div class="err">Enter both teams and a price.</div>'; return; }
+    const t = document.getElementById('t').value;
+    for (let i = 0; i < 5; i++) {
+      const { data, error } = await sb.from('boards').insert({ code: genCode(), admin_id: me.id, home_team: h, away_team: a, price_cents: Math.round(p*100),
+        game_type: document.getElementById('g').value, privacy: document.getElementById('v').value, game_time: t ? new Date(t).toISOString() : null, status: 'open' }).select().single();
+      if (!error) { go('/b/' + data.id); return; }
+      if (error.code !== '23505') { document.getElementById('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+    }
+  };
+}
+
+/* ---------- BOARD ---------- */
+let B = null, S = [], sel = new Set(), method = 'venmo', inspected = null;
+async function loadBoard(id) {
+  const [{ data: b }, { data: s }] = await Promise.all([
+    sb.from('boards').select('*').eq('id', id).maybeSingle(),
+    sb.from('squares').select('*, player:users(name)').eq('board_id', id)
+  ]);
+  B = b; S = s || [];
+}
+async function viewBoard(id) {
+  $app.innerHTML = '<div class="sub">Loading…</div>';
+  sel = new Set(); inspected = null;
+  await loadBoard(id);
+  if (!B) { $app.innerHTML = '<div class="err">Board not found, or you don\'t have access.</div>'; return; }
+  drawBoard();
+  // auto-draw numbers when all 100 are paid
+  if (!B.numbers_drawn && S.filter(s => s.payment_status === 'paid').length === 100) await drawNumbers();
+}
+const isOwner = () => B && B.admin_id === me.id;
+function drawBoard() {
+  const paid = S.filter(s => s.payment_status === 'paid').length, sold = S.length;
+  const open = B.status === 'open';
+  const at = {}; S.forEach(s => at[s.row + '-' + s.col] = s);
+  const hn = B.home_numbers || [], an = B.away_numbers || [];
+  let grid = '<div class="grid"><div></div>' + [...Array(10).keys()].map(c => `<div class="hd">${B.numbers_drawn ? hn[c] : '?'}</div>`).join('');
+  for (let r = 0; r < 10; r++) {
+    grid += `<div class="hd">${B.numbers_drawn ? an[r] : '?'}</div>`;
+    for (let c = 0; c < 10; c++) {
+      const s = at[r+'-'+c], k = r+'-'+c; let cls = '', lbl = '';
+      if (sel.has(k)) cls = 't-sel', lbl = '✓';
+      else if (s) { cls = s.player_id === me.id ? 't-me' : s.payment_status === 'paid' ? 't-paid' : 't-pend'; lbl = esc((s.player?.name || '?').slice(0, 4)); }
+      grid += `<button class="cell ${cls}" onclick="tap(${r},${c})">${lbl}</button>`;
+    }
+  }
+  grid += '</div>';
+  const mineList = S.filter(s => s.player_id === me.id);
+  const total = sel.size * B.price_cents;
+  $app.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="h1">${esc(B.home_team)} vs ${esc(B.away_team)}</div>
+    <div class="sub">${money(B.price_cents)}/sq · ${TYPES[B.game_type] || B.game_type}${B.game_time ? ' · ' + new Date(B.game_time).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}) : ''}</div></div>
+    <span class="badge ${B.status==='open'?'grn':B.status==='cancelled'?'red':'org'}">${B.status}</span></div>
+    <div class="sub">${paid}/100 paid · ${sold-paid} pending · pot ${money(paid*B.price_cents)}</div>
+    ${B.status==='cancelled' ? '<div class="err">This game was cancelled. Owners handle refunds directly.</div>' : ''}
+    <div id="msg"></div><div id="insp"></div>
+    <div class="card gridwrap" style="padding:10px"><div class="sub" style="text-align:center;margin-bottom:6px">${esc(B.home_team)} →  ·  ↓ ${esc(B.away_team)}</div>${grid}
+      <div class="sub" style="margin:8px 0 0;text-align:center">Tap a taken square to see who owns it.${B.numbers_drawn ? '' : ' Numbers are drawn automatically when all 100 are paid.'}</div></div>
+    ${open && sel.size ? `<div class="bar"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><b>${sel.size} square${sel.size>1?'s':''}</b><b>${money(total)}</b></div>
+      <div class="row" style="margin-bottom:8px">${Object.entries(METHODS).map(([k,v])=>`<div class="pm ${method===k?'on':''}" onclick="setMethod('${k}')">${v}</div>`).join('')}</div>
+      <div class="sub" style="margin-bottom:8px">${method==='cash' ? `Hand ${money(total)} cash to ${esc(ownerName())}, who will confirm it.` : `Send ${money(total)} to <b>${PAY[method]}</b> on ${METHODS[method]}. Put <b>${B.code}</b> in the note.`}</div>
+      <button class="btn dark blk" onclick="claim()">Reserve squares</button></div>` : ''}
+    ${mineList.length ? `<div class="card"><div class="sec">Your squares</div>${mineList.map(s=>`<span class="badge ${s.payment_status==='paid'?'grn':'org'}" style="margin:2px">R${s.row+1}C${s.col+1} ${s.payment_status}</span>`).join('')}</div>` : ''}
+    ${rosterHtml()}
+    <div class="card"><div class="sec">Invite players</div><div class="sub">Code <b style="letter-spacing:2px">${B.code}</b></div>
+      <button class="btn out blk" onclick="shareInvite()">📲 Share invite link</button></div>
+    ${isOwner() ? ownerPanel(paid, sold) : ''}`;
+}
+function ownerName() { return profile?.name && isOwner() ? 'you' : 'the board owner'; }
+function rosterHtml() {
+  const m = new Map(); S.forEach(s => { const p = m.get(s.player_id) || { n: s.player?.name || '?', c: 0, paid: 0 }; p.c++; if (s.payment_status === 'paid') p.paid++; m.set(s.player_id, p); });
+  if (!m.size) return '';
+  return `<div class="card"><div class="sec">Players</div>${[...m.values()].map(p => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${esc(p.n)}</span><span>${p.c} sq · ${p.paid===p.c?'<span class="badge grn">paid</span>':`<span class="badge org">${p.c-p.paid} pending</span>`}</span></div>`).join('')}</div>`;
+}
+function ownerPanel(paid, sold) {
+  const pend = S.filter(s => s.payment_status === 'pending');
+  const byP = new Map(); pend.forEach(s => { const p = byP.get(s.player_id) || { n: s.player?.name || '?', ids: [], m: s.payment_method, amt: 0 }; p.ids.push(s.id); p.amt += s.amount_cents; byP.set(s.player_id, p); });
+  const o = B.status === 'open';
+  return `<div class="card" style="border:2px solid #ef9a9a"><div class="sec">👑 Owner controls</div>
+    ${[...byP.entries()].map(([pid, p]) => p.m === 'cash'
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px"><span>${esc(p.n)} · ${p.ids.length} sq · ${money(p.amt)} cash</span><button class="btn dark sm" onclick="confirmIds('${p.ids.join(',')}')">Got cash</button></div>`
+      : `<div style="font-size:12px;color:var(--muted);padding:3px 0">${esc(p.n)} · ${money(p.amt)} via ${METHODS[p.m] || p.m} — awaiting platform confirmation</div>`).join('') || '<div class="sub">No pending payments.</div>'}
+    ${o ? `<hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
+      <button class="btn out blk" style="margin-bottom:8px" onclick="togglePrivacy()">${B.privacy==='private' ? '🌐 Make public (to fill squares)' : '🔒 Make private'}</button>
+      ${paid < 100 ? `<div class="sub">${100-paid} squares not paid yet. Still want to play?</div>
+      <div class="row"><button class="btn dark" onclick="drawNumbers()">Start anyway</button><button class="btn out" style="color:#b71c1c" onclick="cancelGame()">Cancel game</button></div>` : ''}` : ''}</div>`;
+}
+function setMethod(m) { method = m; drawBoard(); }
+function tap(r, c) {
+  const s = S.find(x => x.row === r && x.col === c), k = r+'-'+c;
+  if (s) { sel.delete(k); drawBoard(); const own = s.player_id === me.id;
+    document.getElementById('insp').innerHTML = `<div class="insp"><b>R${r+1} · C${c+1}</b> — ${esc(s.player?.name || 'Unknown')}${own?' (you)':''} · <span class="badge ${s.payment_status==='paid'?'grn':'org'}">${s.payment_status}</span>${B.numbers_drawn ? ` · ${B.home_numbers[c]}/${B.away_numbers[r]}` : ''}</div>`; return; }
+  if (B.status !== 'open') return;
+  sel.has(k) ? sel.delete(k) : sel.add(k); drawBoard();
+}
+async function claim() {
+  const rows = [...sel].map(k => { const [r, c] = k.split('-').map(Number); return { board_id: B.id, player_id: me.id, row: r, col: c, payment_status: 'pending', payment_method: method, amount_cents: B.price_cents, fee_cents: 0, received_by: method === 'cash' ? 'owner' : 'platform' }; });
+  const { error } = await sb.from('squares').insert(rows);
+  if (error) { await loadBoard(B.id); sel = new Set(); drawBoard(); document.getElementById('msg').innerHTML = `<div class="err">${error.code==='23505' ? 'Someone just grabbed one of those squares — pick again.' : esc(error.message)}</div>`; return; }
+  await loadBoard(B.id); sel = new Set(); drawBoard();
+  document.getElementById('msg').innerHTML = `<div class="info">Reserved! ${method==='cash' ? 'Give your cash to the board owner.' : `Send your payment to ${PAY[method]} with code ${B.code} in the note.`} Your squares turn green once it's confirmed.</div>`;
+}
+async function confirmIds(ids) {
+  const { error } = await sb.from('squares').update({ payment_status: 'paid', paid_at: new Date().toISOString() }).in('id', ids.split(','));
+  await loadBoard(B.id); drawBoard();
+  if (error) document.getElementById('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
+  else if (!B.numbers_drawn && S.filter(s => s.payment_status === 'paid').length === 100) await drawNumbers();
+}
+const shuffle = () => { const a = [...Array(10).keys()]; for (let i = 9; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+async function drawNumbers() {
+  if (!B || B.numbers_drawn) return;
+  await sb.from('boards').update({ numbers_drawn: true, home_numbers: shuffle(), away_numbers: shuffle(), status: 'live' }).eq('id', B.id).eq('numbers_drawn', false);
+  await loadBoard(B.id); drawBoard();
+}
+async function cancelGame() {
+  if (!confirm('Cancel this game? You will need to refund players yourself.')) return;
+  await sb.from('boards').update({ status: 'cancelled' }).eq('id', B.id); await loadBoard(B.id); drawBoard();
+}
+async function togglePrivacy() {
+  await sb.from('boards').update({ privacy: B.privacy === 'private' ? 'public' : 'private' }).eq('id', B.id); await loadBoard(B.id); drawBoard();
+}
+async function shareInvite() {
+  const url = location.origin + location.pathname + '?join=' + B.code, text = `Join my squares board: ${B.home_team} vs ${B.away_team}`;
+  if (navigator.share) { try { await navigator.share({ title: 'Gridiron Squares', text, url }); return; } catch(e){ return; } }
+  try { await navigator.clipboard.writeText(url); document.getElementById('msg').innerHTML = '<div class="info">Invite link copied. Paste it in a text.</div>'; } catch(e){ prompt('Copy this link:', url); }
+}
+
+/* ---------- PLATFORM ADMIN: confirm central-account payments ---------- */
+async function viewAdmin() {
+  if (!profile?.is_owner) return go('/');
+  $app.innerHTML = '<div class="sub">Loading…</div>';
+  const { data } = await sb.from('squares').select('id,board_id,amount_cents,payment_method,player:users(name),boards(code,home_team,away_team)').eq('payment_status', 'pending').neq('received_by', 'owner');
+  const g = new Map(); (data || []).forEach(s => { const k = s.board_id + '|' + s.player?.name + '|' + s.payment_method; const x = g.get(k) || { s, ids: [], amt: 0 }; x.ids.push(s.id); x.amt += s.amount_cents; g.set(k, x); });
+  $app.innerHTML = `<div class="h1">Admin</div><div class="sub">Pending Venmo / Zelle / Cash App payments</div>
+    ${[...g.values()].map(x => `<div class="card"><b>${esc(x.s.player?.name)}</b> · ${money(x.amt)} via ${METHODS[x.s.payment_method] || x.s.payment_method}
+      <div class="sub" style="margin:2px 0 8px">${esc(x.s.boards?.home_team)} vs ${esc(x.s.boards?.away_team)} · code ${x.s.boards?.code} · ${x.ids.length} sq</div>
+      <button class="btn dark sm" onclick="adminConfirm('${x.ids.join(',')}')">Payment received</button></div>`).join('') || '<div class="info">Nothing pending.</div>'}`;
+}
+async function adminConfirm(ids) { await sb.from('squares').update({ payment_status: 'paid', paid_at: new Date().toISOString() }).in('id', ids.split(',')); viewAdmin(); }
+
+/* ---------- ROUTER ---------- */
+async function route() {
+  if (!me) return viewAuth(pending() ? 'signup' : 'login');
+  const p = location.hash.slice(1) || '/';
+  if (p === '/' ) return viewHome();
+  if (p === '/new') return viewNew();
+  if (p === '/join') return viewJoin();
+  if (p === '/admin') return viewAdmin();
+  if (p.startsWith('/b/')) return viewBoard(p.slice(3));
+  viewHome();
+}
+window.addEventListener('hashchange', route);
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data.session) { me = data.session.user; profile = await ensureProfile(me); }
+  renderNav(); route();
+})();
+</script>
+</body>
+</html>
