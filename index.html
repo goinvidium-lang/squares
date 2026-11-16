@@ -7,21 +7,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 <style>
-:root{--bg:#dde1e7;--border:#b0b8c1;--bi:#9aa3ad;--ink:#1a1a1a;--muted:#555f6e;--muted2:#6c757d;--accent:#1565c0}
+:root{--bg:#c7cdd5;--card:#f3f4f6;--field:#fafbfc;--border:#8f99a5;--bi:#7b8693;--ink:#1a1a1a;--muted:#555f6e;--muted2:#6c757d;--accent:#1565c0}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,sans-serif;min-height:100vh;-webkit-text-size-adjust:100%}
-#nav{position:fixed;top:0;left:0;right:0;z-index:50;background:#fff;border-bottom:2px solid var(--border);height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+#nav{position:fixed;top:0;left:0;right:0;z-index:50;background:var(--card);border-bottom:2px solid var(--border);height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--ink);text-decoration:none;cursor:pointer}
 #app{max-width:480px;margin:0 auto;padding:68px 16px 40px}
 .h1{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;margin:0 0 2px}
 .sub{font-size:12px;color:var(--muted);margin-bottom:14px}
 .lbl{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin:0 0 4px;font-weight:600;display:block}
-.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.inp{background:#fff;border:1.5px solid var(--bi);border-radius:6px;padding:10px;font-size:16px;font-family:inherit;width:100%;outline:none;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.inp{background:var(--field);border:1.5px solid var(--bi);border-radius:6px;padding:10px;font-size:16px;font-family:inherit;width:100%;outline:none;margin-bottom:10px}
 .inp:focus{border-color:var(--accent)}
 .btn{font:500 14px Inter,sans-serif;padding:11px 16px;border-radius:8px;border:1.5px solid transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
 .btn:disabled{opacity:.5}
-.dark{background:var(--ink);color:#fff}.out{background:#fff;border-color:var(--bi);color:var(--muted)}
+.dark{background:var(--ink);color:#fff}.out{background:var(--field);border-color:var(--bi);color:var(--muted)}
 .blk{width:100%}.sm{font-size:12px;padding:6px 12px}
 .badge{display:inline-flex;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
 .grn{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}.red{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
@@ -31,23 +31,23 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,sans-
 .row{display:flex;gap:8px}.row>*{flex:1}
 .gridwrap{overflow-x:auto}
 .grid{display:grid;grid-template-columns:22px repeat(10,1fr);gap:2px;min-width:300px}
-.cell{aspect-ratio:1;border-radius:4px;border:1.5px solid var(--bi);background:#fff;font-size:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;padding:0;color:var(--muted)}
+.cell{aspect-ratio:1;border-radius:4px;border:1.5px solid var(--bi);background:var(--field);font-size:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;padding:0;color:var(--muted)}
 .hd{font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .t-paid{background:#fff3e0;border-color:#ffcc80;color:#bf360c}.t-pend{background:#fffde7;border-color:#fff176;color:#f9a825}
 .t-me{background:#e8f5e9;border-color:#a5d6a7;color:#2e7d32}.t-sel{background:#1565c0;border-color:#0d47a1;color:#fff}
 .insp{background:#f3e5f5;border:1px solid #ce93d8;color:#4a148c;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:10px}
-.bar{position:sticky;bottom:0;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;box-shadow:0 -2px 10px rgba(0,0,0,.12);margin-top:10px}
-.pm{padding:10px;border:1.5px solid var(--bi);border-radius:8px;text-align:center;font-size:12px;font-weight:600;background:#fff;cursor:pointer}
+.bar{position:sticky;bottom:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;box-shadow:0 -2px 10px rgba(0,0,0,.12);margin-top:10px}
+.pm{padding:10px;border:1.5px solid var(--bi);border-radius:8px;text-align:center;font-size:12px;font-weight:600;background:var(--field);cursor:pointer}
 .pm.on{border-color:var(--accent);background:#e3f2fd;color:#0d47a1}
 a{color:var(--accent)}
 .sec{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
-.mini{display:grid;grid-template-columns:16px repeat(10,1fr);gap:2px;max-width:280px;margin:0 auto}
-.mh{font-size:8px;color:var(--muted2);display:flex;align-items:center;justify-content:center}
-.mc{aspect-ratio:1;border-radius:3px;background:#eef0f3;border:1px solid #d5d9df;transition:all .3s}
-.mc.on{transform:scale(1.15);border-color:transparent}
+.mini{display:grid;grid-template-columns:22px repeat(10,1fr);gap:2px;max-width:340px;margin:0 auto}
+.mh{font-size:10px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.mc{aspect-ratio:1;border-radius:4px;background:var(--field);border:1.5px solid var(--bi);transition:all .3s}
+.mc.on{transform:scale(1.08);border-color:rgba(0,0,0,.35)}
 .mc.w{background:#f9a825}.mc.r{background:#8e24aa}.mc.x{background:#1e88e5}.mc.k{background:#26a69a}
 .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;margin:2px 10px 2px 0}.lg i{width:12px;height:12px;display:inline-block}
-.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:5px 0;border-bottom:1px solid #eef0f3}.kv:last-child{border:0}.kv span:first-child{color:var(--muted)}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:5px 0;border-bottom:1px solid #d4d9df}.kv:last-child{border:0}.kv span:first-child{color:var(--muted)}
 .code{font-family:'Bebas Neue',sans-serif;font-size:56px;letter-spacing:8px;text-align:center;margin:6px 0}
 </style>
 </head>
@@ -212,7 +212,7 @@ function renderSetup() {
       <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:0 0 10px"><input type="checkbox" id="co"><span>Also pay the <b>four diagonal corners</b> around the winner</span></label>
       <div id="mainrow" style="display:none"><label class="lbl">Winning square gets (% of each period)</label>
         <input class="inp" type="number" inputmode="numeric" min="1" max="100" id="mn" style="margin-bottom:2px"><div class="sub" style="margin:0 0 10px">The rest is split evenly among the extra squares.</div></div>
-      <div style="background:#f6f7f9;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:4px">
+      <div style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:10px;margin-top:4px">
         <div class="lbl" style="text-align:center">How it looks on a board</div>
         ${miniBoardHtml()}
         <div id="lg" style="margin-top:8px;text-align:center"></div>
@@ -261,7 +261,7 @@ function renderVerify() {
       ${kv('Paid out to winners', money(c.net))}
       ${kv('Privacy', d.v === 'private' ? '🔒 Private (invite only)' : '🌐 Public')}</div>
     <div class="card"><div class="sec">How it pays</div>
-      <div style="background:#f6f7f9;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">${miniBoardHtml()}<div style="margin-top:8px;text-align:center">${legendHtml(d)}</div></div>
+      <div style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">${miniBoardHtml()}<div style="margin-top:8px;text-align:center">${legendHtml(d)}</div></div>
       <div style="font-size:13px">${payoutHtml(d)}</div></div>
     <label style="display:flex;gap:10px;font-size:13px;margin:12px 2px;align-items:flex-start"><input type="checkbox" id="ok" style="margin-top:3px"> I've checked the teams, price and payouts. I understand the rules can't be changed after players join.</label>
     <button class="btn dark blk" id="cf" disabled>Confirm &amp; create board</button>
@@ -343,6 +343,7 @@ function drawBoard() {
     <div class="sub" style="margin-bottom:4px">${esc(rulesText(B.rules))}</div>
     <div class="sub">${paid}/100 paid · ${sold-paid} pending · pot ${money(paid*B.price_cents)}</div>
     ${B.status==='cancelled' ? '<div class="err">This game was cancelled. Owners handle refunds directly.</div>' : ''}
+    <button class="btn out blk sm" style="margin:2px 0 10px;padding:9px" onclick="shareInvite()">📲 Invite friends · code <b style="letter-spacing:2px">${B.code}</b></button>
     <div id="msg"></div><div id="insp"></div>
     <div class="card gridwrap" style="padding:10px"><div class="sub" style="text-align:center;margin-bottom:6px">${esc(B.home_team)} →  ·  ↓ ${esc(B.away_team)}</div>${grid}
       <div class="sub" style="margin:8px 0 0;text-align:center">Tap a taken square to see who owns it.${B.numbers_drawn ? '' : ' Numbers are drawn automatically when all 100 are paid.'}</div></div>
@@ -352,7 +353,7 @@ function drawBoard() {
       <button class="btn dark blk" onclick="claim()">Reserve squares</button></div>` : ''}
     ${mineList.length ? `<div class="card"><div class="sec">Your squares</div>${mineList.map(s=>`<span class="badge ${s.payment_status==='paid'?'grn':'org'}" style="margin:2px">R${s.row+1}C${s.col+1} ${s.payment_status}</span>`).join('')}</div>` : ''}
     ${rosterHtml()}
-    <div class="card"><div class="sec">Invite players</div><div class="sub">Code <b style="letter-spacing:2px">${B.code}</b></div>
+    <div class="card"><div class="sec">Invite friends</div><div class="sub">Anyone on this board can share it. Code <b style="letter-spacing:2px">${B.code}</b></div>
       <button class="btn out blk" onclick="shareInvite()">📲 Share invite link</button></div>
     ${isOwner() ? ownerPanel(paid, sold) : ''}`;
 }
