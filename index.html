@@ -103,15 +103,14 @@ table.tb{width:100%;border-collapse:collapse;font-size:13px}
 /* ====== CONFIG: paste your values ====== */
 const SUPABASE_URL = 'https://qlosfkfusnsebvdzogfq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_-TP5ssGRM4L9LnBXcZ8xaw_52-ZY892';
-// Central account players pay for Venmo / Zelle / Cash App (cash goes to the board owner)
-const PAY = { venmo:'@your-venmo', zelle:'you@example.com', cashapp:'$your-cashapp' };
+// Players pay each board's owner directly. Owners save their Venmo / Zelle / Cash App once in their profile.
 /* ======================================= */
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $app = document.getElementById('app'), $navr = document.getElementById('navr');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = c => '$' + (c/100).toFixed(c%100 ? 2 : 0);
-let SET = { fee_mode:'one_square', fee_flat_cents:100, fee_percent:5, league_threshold:5, league_share_percent:25 }, setLoaded = false;
+let SET = { fee_mode:'flat', fee_flat_cents:0, fee_percent:5, league_threshold:5, league_share_percent:25 }, setLoaded = false;
 async function loadSettings() { try { const { data } = await sb.from('platform_settings').select('*').eq('id', 1).maybeSingle(); if (data) SET = { ...SET, ...data }; } catch(e) {} setLoaded = true; }
 const feeFor = priceCents => SET.fee_mode === 'flat' ? SET.fee_flat_cents : SET.fee_mode === 'percent' ? Math.round(priceCents * 100 * SET.fee_percent / 100) : priceCents;
 const feeLabel = () => SET.fee_mode === 'one_square' ? 'Board fee (price of one square)' : 'Platform fee';
@@ -125,6 +124,50 @@ const PERIODS = ['Q1','Q2 (half)','Q3','Final'];
 const rulesText = r => { if(!r) return ''; const p = r.periods||{}; const on = ['q1','q2','q3','q4'].map((k,i)=>p[k]?`${PERIODS[i]} ${p[k]}%`:null).filter(Boolean).join(' · ');
   const ex = [r.reverse&&'reverse', r.cross&&'up/down/left/right', r.corners&&'diagonal corners'].filter(Boolean);
   return `${on} — winner${ex.length ? ' gets ' + (r.main_pct||50) + '%, ' + ex.join(' + ') + ' share the rest' : ' takes all'}`; };
+
+/* ---------- PAYMENT ACCOUNTS (saved once per user) ---------- */
+let PA = null, editPA = false;
+async function loadPA() { const { data } = await sb.from('payment_accounts').select('*').eq('user_id', me.id).maybeSingle(); PA = data || null; return PA; }
+const hasPA = () => !!(PA && (PA.venmo || PA.zelle || PA.cashapp));
+const payInfo = () => ({ venmo: PA?.venmo || null, zelle: PA?.zelle || null, cashapp: PA?.cashapp || null });
+const paText = a => a ? [a.venmo && 'Venmo ' + a.venmo, a.zelle && 'Zelle ' + a.zelle, a.cashapp && 'Cash App ' + a.cashapp].filter(Boolean).join(' · ') : '';
+function validatePA(v) {
+  const out = {}, errs = [];
+  let x = (v.venmo || '').trim().replace(/^@/, '');
+  if (x) { if (/^[A-Za-z0-9_-]{5,30}$/.test(x)) out.venmo = '@' + x; else errs.push('Venmo username: 5–30 letters, numbers, - or _'); }
+  x = (v.zelle || '').trim();
+  if (x) { const d = x.replace(/\D/g, '');
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)) out.zelle = x.toLowerCase();
+    else if (d.length === 10 || (d.length === 11 && d[0] === '1')) out.zelle = d.slice(-10).replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+    else errs.push('Zelle: enter the email or US mobile number your Zelle is registered to'); }
+  x = (v.cashapp || '').trim().replace(/^\$/, '');
+  if (x) { if (/^[A-Za-z0-9_]{1,20}$/.test(x) && /[A-Za-z]/.test(x)) out.cashapp = '$' + x; else errs.push('Cash App $cashtag: letters and numbers, up to 20'); }
+  if (!out.venmo && !out.zelle && !out.cashapp && !errs.length) errs.push('Add at least one account (Venmo, Zelle or Cash App).');
+  return { out, errs };
+}
+function paFormHtml(note) {
+  return `<div class="sec">Payment accounts</div><div class="sub" style="margin-bottom:8px">${note}</div>
+    <label class="lbl">Venmo</label><input class="inp" id="pa-v" placeholder="@username" autocapitalize="none" autocorrect="off" value="${esc(PA?.venmo || '')}">
+    <label class="lbl">Zelle (email or mobile number)</label><input class="inp" id="pa-z" placeholder="The email or phone your Zelle uses" autocapitalize="none" value="${esc(PA?.zelle || '')}">
+    <label class="lbl">Cash App (optional)</label><input class="inp" id="pa-c" placeholder="$cashtag" autocapitalize="none" autocorrect="off" value="${esc(PA?.cashapp || '')}">
+    <div id="pa-m"></div><button class="btn dark blk" id="pa-s">Save payment accounts</button>`;
+}
+function bindPAForm(onSaved) {
+  const btn = document.getElementById('pa-s'); if (!btn) return;
+  btn.onclick = async () => {
+    const m = document.getElementById('pa-m'), v = id => document.getElementById(id).value;
+    const { out, errs } = validatePA({ venmo: v('pa-v'), zelle: v('pa-z'), cashapp: v('pa-c') });
+    if (errs.length) { m.innerHTML = `<div class="err">${errs.map(esc).join('<br>')}</div>`; return; }
+    const row = { user_id: me.id, venmo: out.venmo || null, zelle: out.zelle || null, cashapp: out.cashapp || null, verified_at: PA?.verified_at || new Date().toISOString() };
+    btn.disabled = true;
+    const { error } = await sb.from('payment_accounts').upsert(row, { onConflict: 'user_id' });
+    btn.disabled = false;
+    if (error) { m.innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+    PA = { ...(PA || {}), ...row }; m.innerHTML = '<div class="info">Saved ✓</div>'; if (onSaved) onSaved();
+  };
+}
+const payMethods = () => { const pi = B?.pay_info || {}; return [...['venmo', 'zelle', 'cashapp'].filter(k => pi[k]), 'cash']; };
+
 let me = null, profile = null;
 const go = p => { location.hash = '#' + p; };
 
@@ -213,7 +256,7 @@ async function viewHome() {
     ${[...played.values()].map(p => `<div class="card" style="border:2px solid #a5d6a7;cursor:pointer" onclick="go('/b/${p.b.id}')"><b>${esc(p.b.home_team)} vs ${esc(p.b.away_team)}</b>
       <div class="sub" style="margin:4px 0 0">${p.n} square${p.n>1?'s':''} · ${stBadge(p.b.status)}</div></div>`).join('')}
     ${!(mine||[]).length && !played.size ? '<div class="info">No boards yet. Create one and text the invite link to your friends, or join with a code.</div>' : ''}`;
-  $app.insertAdjacentHTML('beforeend', payoutCardHtml()); bindPayoutCard();
+  await loadPA(); $app.insertAdjacentHTML('beforeend', `<div class="card" style="margin-top:12px">${paFormHtml('Where you get paid. If you run a board, players pay you here. If you win, the owner pays you here. Set it once.')}</div>`); bindPAForm();
 }
 
 /* ---------- JOIN ---------- */
@@ -253,10 +296,11 @@ function paintMini(d, root) {
 const legendHtml = d => { const it = [['w','Winning square']]; if (d.reverse) it.push(['r','Reverse']); if (d.cross) it.push(['x','Up / down / left / right']); if (d.corners) it.push(['k','Diagonal corners']);
   return it.map(([k,t]) => `<span class="lg"><i class="mc on ${k}"></i>${t}</span>`).join(''); };
 
-function viewNew() { if (!draft) draft = newDraft(); renderSetup(); }
+async function viewNew() { if (!draft) draft = newDraft(); await loadPA(); renderSetup(); }
 function renderSetup() {
   const d = draft;
   $app.innerHTML = `<div class="h1">New board</div><div class="sub">Step 1 of 3 · Set up the game</div><div id="msg"></div>
+    <div class="card" id="pacard">${(hasPA() && !editPA) ? `<div class="sec">Players pay you at</div>${[PA.venmo && 'Venmo ' + esc(PA.venmo), PA.zelle && 'Zelle ' + esc(PA.zelle), PA.cashapp && 'Cash App ' + esc(PA.cashapp), 'Cash in person'].filter(Boolean).map(t => `<span class="badge blue" style="margin:2px">${t}</span>`).join('')}<div class="sub" style="margin:8px 0 0">Saved to your profile. These are copied onto this board when you create it. <a href="#" onclick="__readDraft();editPA=true;renderSetup();return false">Edit</a></div>` : paFormHtml('Players send their money to you directly, so they need to know where. Add at least one account. You only do this once, and it is saved to your profile.')}</div>
     <div class="card">
       <div class="row"><div><label class="lbl">Home team</label><input class="inp" id="h" placeholder="Dragons"></div><div><label class="lbl">Away team</label><input class="inp" id="a" placeholder="Tigers"></div></div>
       <div class="row"><div><label class="lbl">Price / square ($)</label><input class="inp" id="p" type="number" inputmode="decimal"></div>
@@ -295,7 +339,7 @@ function renderSetup() {
   const preview = () => { read(); const c = calc(d), tot = d.per.reduce((x,y) => x+y, 0);
     $('mainrow').style.display = c.n ? 'block' : 'none'; paintMini(d, $app); $('lg').innerHTML = legendHtml(d);
     $('pv').innerHTML = `<b>Payout per winning square</b>` + payoutHtml(d) +
-      `<div style="font-size:11px;margin-top:6px;opacity:.85">Full board ${money(c.pot)} − ${money(c.fee)} ${feeLabel().toLowerCase()} = ${money(c.net)} paid out.${tot!==100 ? `<br><b style="color:#b71c1c">Percentages total ${tot}% — must be 100%.</b>` : ''}</div>`;
+      `<div style="font-size:11px;margin-top:6px;opacity:.85">Full board ${money(c.pot)}${c.fee ? ` − ${money(c.fee)} ${feeLabel().toLowerCase()}` : ''} = ${money(c.net)} paid out.${tot!==100 ? `<br><b style="color:#b71c1c">Percentages total ${tot}% — must be 100%.</b>` : ''}</div>`;
     $('mk').disabled = tot !== 100; };
   fill(); preview();
   $('g').addEventListener('change', () => { if ($('g').value !== 'custom') { const e = EXTRAS[$('g').value]; $('rv').checked = e.reverse; $('cr').checked = e.cross; $('co').checked = e.corners; } preview(); });
@@ -303,8 +347,11 @@ function renderSetup() {
   inputs.forEach(el => el.addEventListener('input', () => { $('sp').value = 'custom'; preview(); }));
   [$('rv'), $('cr'), $('co'), $('mn')].forEach(el => el.addEventListener('input', () => { $('g').value = 'custom'; preview(); }));
   ['h','a','p','t','v'].forEach(i => $(i).addEventListener('input', preview));
+  window.__readDraft = read;
+  if (!hasPA() || editPA) bindPAForm(() => { read(); editPA = false; renderSetup(); });
   $('mk').onclick = () => {
     read();
+    if (!hasPA()) { $('msg').innerHTML = '<div class="err">Save your payment accounts first, so players know where to pay you.</div>'; window.scrollTo(0,0); return; }
     if (!d.h.trim() || !d.a.trim() || !(parseFloat(d.p) > 0)) { $('msg').innerHTML = '<div class="err">Enter both teams and a price.</div>'; window.scrollTo(0,0); return; }
     renderVerify();
   };
@@ -317,7 +364,8 @@ function renderVerify() {
       ${kv('Game time', d.t ? new Date(d.t).toLocaleString([], {weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'Not set')}
       ${kv('Price per square', money(Math.round(parseFloat(d.p)*100)))}
       ${kv('Full board', money(c.pot))}
-      ${kv(feeLabel(), money(c.fee))}
+      ${c.fee ? kv(feeLabel(), money(c.fee)) : ''}
+      ${kv('Players pay you via', esc(paText(payInfo())) + '<br>Cash in person')}
       ${kv('Paid out to winners', money(c.net))}
       ${kv('Privacy', d.v === 'private' ? '🔒 Private (invite only)' : '🌐 Public')}</div>
     <div class="card"><div class="sec">How it pays</div>
@@ -336,7 +384,7 @@ function renderVerify() {
     const gt = ['classic','reverse','cardinal','fullneighbor'].includes(d.g) ? d.g : 'custom';
     for (let i = 0; i < 5; i++) {
       const { data, error } = await sb.from('boards').insert({ code: genCode(), admin_id: me.id, home_team: d.h.trim(), away_team: d.a.trim(), price_cents: Math.round(parseFloat(d.p)*100),
-        game_type: gt, privacy: d.v, rules, platform_fee_cents: c.fee, game_time: d.t ? new Date(d.t).toISOString() : null, status: 'open' }).select().single();
+        game_type: gt, privacy: d.v, rules, platform_fee_cents: c.fee, pay_info: payInfo(), game_time: d.t ? new Date(d.t).toISOString() : null, status: 'open' }).select().single();
       if (!error) { draft = null; return renderCreated(data); }
       if (error.code !== '23505') { $('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; $('cf').disabled = false; return; }
     }
@@ -396,6 +444,7 @@ function drawBoard() {
   grid += '</div>';
   const mineList = S.filter(s => s.player_id === me.id);
   const total = sel.size * B.price_cents;
+  if (!payMethods().includes(method)) method = payMethods()[0];
   $app.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="h1">${esc(B.home_team)} vs ${esc(B.away_team)}</div>
     <div class="sub">${money(B.price_cents)}/sq · ${TYPES[B.game_type] || B.game_type}${B.game_time ? ' · ' + new Date(B.game_time).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}) : ''}</div></div>
@@ -409,10 +458,10 @@ function drawBoard() {
     <div class="card gridwrap" style="padding:10px"><div class="sub" style="text-align:center;margin-bottom:6px">${esc(B.home_team)} →  ·  ↓ ${esc(B.away_team)}</div>${grid}
       <div class="sub" style="margin:8px 0 0;text-align:center">Tap a taken square to see who owns it.${B.numbers_drawn ? '' : ' Numbers are drawn automatically when all 100 are paid.'}</div></div>
     ${open && sel.size ? `<div class="bar"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><b>${sel.size} square${sel.size>1?'s':''}</b><b>${money(total)}</b></div>
-      <div class="row" style="margin-bottom:8px">${Object.entries(METHODS).map(([k,v])=>`<div class="pm ${method===k?'on':''}" onclick="setMethod('${k}')">${v}</div>`).join('')}</div>
-      <div class="sub" style="margin-bottom:8px">${method==='cash' ? `Hand ${money(total)} cash to ${esc(ownerName())}, who will confirm it.` : `Send ${money(total)} to <b>${PAY[method]}</b> on ${METHODS[method]}. Put <b>${B.code}</b> in the note.`}</div>
+      <div class="row" style="margin-bottom:8px">${payMethods().map(k=>`<div class="pm ${method===k?'on':''}" onclick="setMethod('${k}')">${k==='cash'?'Cash':METHODS[k]}</div>`).join('')}</div>
+      <div class="sub" style="margin-bottom:8px">${method==='cash' ? `Hand ${money(total)} cash to the board owner, who will confirm it.` : `Send ${money(total)} to the owner on ${METHODS[method]}: <b>${esc(B.pay_info[method])}</b>. Add <b>${B.code}</b> to the note.`}</div>
       <button class="btn dark blk" onclick="claim()">Reserve squares</button></div>` : ''}
-    ${mineList.length ? `<div class="card"><div class="sec">Your squares</div>${mineList.map(s=>`<span class="badge ${s.payment_status==='paid'?'grn':'org'}" style="margin:2px">R${s.row+1}C${s.col+1} ${s.payment_status}</span>`).join('')}</div>` : ''}
+    ${mineList.length ? `<div class="card"><div class="sec">Your squares</div>${mineList.map(s=>`<span class="badge ${s.payment_status==='paid'?'grn':'org'}" style="margin:2px">R${s.row+1}C${s.col+1} ${s.payment_status}</span>`).join('')}${(() => { const pn = mineList.filter(s => s.payment_status === 'pending'); return pn.length ? `<div class="sub" style="margin:8px 0 0">You owe <b>${money(sum(pn, s => s.amount_cents))}</b>. Pay the owner: ${esc(paText(B.pay_info)) || 'cash'}. They confirm it when it arrives.</div>` : ''; })()}</div>` : ''}
     ${rosterHtml()}
     <div class="card"><div class="sec">Invite friends</div><div class="sub">Anyone on this board can share it. Code <b style="letter-spacing:2px">${B.code}</b></div>
       <button class="btn out blk" onclick="shareInvite()">📲 Share invite link</button></div>
@@ -426,12 +475,11 @@ function rosterHtml() {
 }
 function ownerPanel(paid, sold) {
   const pend = S.filter(s => s.payment_status === 'pending');
-  const byP = new Map(); pend.forEach(s => { const p = byP.get(s.player_id) || { n: s.player?.name || '?', ids: [], m: s.payment_method, amt: 0 }; p.ids.push(s.id); p.amt += s.amount_cents; byP.set(s.player_id, p); });
+  const byP = new Map(); pend.forEach(s => { const k = s.player_id + '|' + s.payment_method; const p = byP.get(k) || { n: s.player?.name || '?', ids: [], m: s.payment_method, amt: 0 }; p.ids.push(s.id); p.amt += s.amount_cents; byP.set(k, p); });
   const o = B.status === 'open' && !B.numbers_drawn;
   return `<div class="card" style="border:2px solid #ef9a9a"><div class="sec">👑 Owner controls</div>
-    ${[...byP.entries()].map(([pid, p]) => p.m === 'cash'
-      ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px"><span>${esc(p.n)} · ${p.ids.length} sq · ${money(p.amt)} cash</span><button class="btn dark sm" onclick="confirmIds('${p.ids.join(',')}')">Got cash</button></div>`
-      : `<div style="font-size:12px;color:var(--muted);padding:3px 0">${esc(p.n)} · ${money(p.amt)} via ${METHODS[p.m] || p.m} — awaiting platform confirmation</div>`).join('') || '<div class="sub">No pending payments.</div>'}
+    <div class="sub">Check your Venmo, Zelle, Cash App or cash for each payment, then tap Received. The numbers are revealed once all 100 squares are paid.</div>
+    ${[...byP.values()].map(p => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:13px"><span>${esc(p.n)} · ${p.ids.length} sq · <b>${money(p.amt)}</b> via ${p.m === 'cash' ? 'Cash' : (METHODS[p.m] || p.m)}</span><span style="white-space:nowrap"><button class="btn dark sm" onclick="confirmIds('${p.ids.join(',')}')">Received</button> <button class="btn out sm" onclick="ownerRelease('${p.ids.join(',')}')">Not received</button></span></div>`).join('') || '<div class="sub">No pending payments.</div>'}
     ${o ? `<hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
       <button class="btn out blk" style="margin-bottom:8px" onclick="togglePrivacy()">${B.privacy==='private' ? '🌐 Make public (to fill squares)' : '🔒 Make private'}</button>
       ${paid < 100 ? `<div class="sub">${100-paid} squares not paid yet. Still want to play?</div>
@@ -446,11 +494,17 @@ function tap(r, c) {
   sel.has(k) ? sel.delete(k) : sel.add(k); drawBoard();
 }
 async function claim() {
-  const rows = [...sel].map(k => { const [r, c] = k.split('-').map(Number); return { board_id: B.id, player_id: me.id, row: r, col: c, payment_status: 'pending', payment_method: method, amount_cents: B.price_cents, fee_cents: 0, received_by: method === 'cash' ? 'owner' : 'platform' }; });
+  const rows = [...sel].map(k => { const [r, c] = k.split('-').map(Number); return { board_id: B.id, player_id: me.id, row: r, col: c, payment_status: 'pending', payment_method: method, amount_cents: B.price_cents, fee_cents: 0, received_by: 'owner' }; });
   const { error } = await sb.from('squares').insert(rows);
   if (error) { await loadBoard(B.id); sel = new Set(); drawBoard(); document.getElementById('msg').innerHTML = `<div class="err">${error.code==='23505' ? 'Someone just grabbed one of those squares — pick again.' : esc(error.message)}</div>`; return; }
   await loadBoard(B.id); sel = new Set(); drawBoard();
-  document.getElementById('msg').innerHTML = `<div class="info">Reserved! ${method==='cash' ? 'Give your cash to the board owner.' : `Send your payment to ${PAY[method]} with code ${B.code} in the note.`} Your squares turn green once it's confirmed.</div>`;
+  document.getElementById('msg').innerHTML = `<div class="info">Reserved! ${method==='cash' ? 'Give your cash to the board owner.' : `Send your payment to the owner: ${esc(B.pay_info[method])} (${METHODS[method]}). Add ${B.code} to the note.`} Your squares turn green once the owner confirms it.</div>`;
+}
+async function ownerRelease(ids) {
+  if (!confirm('Release these squares back to the board? Only do this if the money never arrived.')) return;
+  const { error } = await sb.from('squares').delete().in('id', ids.split(','));
+  await loadBoard(B.id); drawBoard();
+  if (error) document.getElementById('msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
 }
 async function confirmIds(ids) {
   const { error } = await sb.from('squares').update({ payment_status: 'paid', paid_at: new Date().toISOString() }).in('id', ids.split(','));
@@ -498,11 +552,11 @@ async function fetchAll(table, cols) {
 }
 let AD = null, ADB = null;
 async function loadAdmin() {
-  const [boards, squares, users, payouts, results] = await Promise.all([
+  const [boards, squares, users, payouts, results, pas] = await Promise.all([
     fetchAll('boards', '*'), fetchAll('squares', 'id,board_id,player_id,row,col,payment_status,payment_method,amount_cents,received_by,created_at'),
-    fetchAll('users', 'id,name,email,pay_handle'), fetchAll('payouts', '*'), fetchAll('quarter_results', '*')]);
+    fetchAll('users', 'id,name,email'), fetchAll('payouts', '*'), fetchAll('quarter_results', '*'), fetchAll('payment_accounts', '*')]);
   const sq = new Map(); squares.forEach(s => { if (!sq.has(s.board_id)) sq.set(s.board_id, []); sq.get(s.board_id).push(s); });
-  AD = { boards, squares, users, payouts, results, sq, u: new Map(users.map(x => [x.id, x])), b: new Map(boards.map(x => [x.id, x])) };
+  AD = { boards, squares, users, payouts, results, pa: new Map(pas.map(x => [x.user_id, x])), sq, u: new Map(users.map(x => [x.id, x])), b: new Map(boards.map(x => [x.id, x])) };
 }
 const uname = id => AD.u.get(id)?.name || 'Unknown';
 const bname = b => `${esc(b.home_team)} vs ${esc(b.away_team)}`;
@@ -597,7 +651,7 @@ async function viewAdminPayments() {
     x.ids.push(s.id); x.amt += s.amount_cents; if (s.created_at < x.t) x.t = s.created_at; g.set(k, x);
   });
   const rows = [...g.values()].filter(x => x.b).sort((a, b) => a.t < b.t ? -1 : 1);
-  adminShell('/admin/payments', `<div class="h1">Payments to confirm</div><div class="sub">Venmo / Zelle / Cash App go to the central account. Cash goes to the board owner (you can confirm either).</div>` +
+  adminShell('/admin/payments', `<div class="h1">Pending payments</div><div class="sub">Players pay board owners directly and owners confirm. These are still waiting. You can step in on any that are stuck.</div>` +
     (rows.length ? `<div class="card" style="padding:0;overflow-x:auto"><table class="tb"><tr><th>Player</th><th>Board</th><th>Method</th><th>Amount</th><th class="hm">Waiting</th><th></th></tr>
     ${rows.map(x => `<tr><td><b>${esc(uname(x.pid))}</b></td><td><a href="#/admin/b/${x.b.id}">${bname(x.b)}</a><br><span class="muted">${x.b.code}</span></td><td>${METHODS[x.m] || x.m}</td><td><b>${money(x.amt)}</b><br><span class="muted">${x.ids.length} sq</span></td><td class="hm">${ago(x.t)}</td>
       <td style="white-space:nowrap"><button class="btn dark sm" onclick="adminConfirm('${x.ids.join(',')}','${x.b.id}')">Confirm</button> <button class="btn out sm" onclick="adminRelease('${x.ids.join(',')}')">Release</button></td></tr>`).join('')}</table></div>` : '<div class="info">Nothing waiting. 🎉</div>'));
@@ -627,7 +681,7 @@ async function viewAdminPayouts() {
     <div class="tabsbar"><a class="at ${pf === 'owed' ? 'on' : ''}" href="#" onclick="pf='owed';route();return false">Owed</a><a class="at ${pf === 'paid' ? 'on' : ''}" href="#" onclick="pf='paid';route();return false">Paid</a></div>` +
     (list.length ? `<div class="card" style="padding:0;overflow-x:auto"><table class="tb"><tr><th>Player</th><th>Board</th><th>For</th><th>Amount</th><th class="hm">${pf === 'owed' ? 'Waiting' : 'Paid'}</th><th></th></tr>
     ${list.map(p => { const b = AD.b.get(p.board_id), u = AD.u.get(p.player_id);
-      return `<tr><td><b>${esc(u?.name || 'Unknown')}</b><br>${u?.pay_handle ? `<span class="muted">${esc(u.pay_handle)}</span>` : '<span style="color:#b71c1c;font-size:11px">no payout info</span>'}</td>
+      return `<tr><td><b>${esc(u?.name || 'Unknown')}</b><br>${paText(AD.pa.get(p.player_id)) ? `<span class="muted">${esc(paText(AD.pa.get(p.player_id)))}</span>` : '<span style="color:#b71c1c;font-size:11px">no payout info</span>'}</td>
       <td>${b ? `<a href="#/admin/b/${b.id}">${bname(b)}</a>` : '—'}</td><td>${p.kind === 'refund' ? 'Refund' : esc(PERIODS[(p.quarter || 1) - 1])}<br><span class="muted">${esc(p.note || '')}</span></td>
       <td><b>${money(p.amount_cents)}</b></td><td class="hm">${pf === 'owed' ? ago(p.created_at) : `${p.paid_at ? new Date(p.paid_at).toLocaleDateString() : ''}<br><span class="muted">${esc(p.method || '')}</span>`}</td>
       <td>${pf === 'owed' ? `<button class="btn dark sm" onclick="adminPay('${p.id}')">Mark paid</button>` : '✓'}</td></tr>`; }).join('')}</table></div>` : `<div class="info">${pf === 'owed' ? 'Nothing owed right now.' : 'No payouts sent yet.'}</div>`));
@@ -779,17 +833,6 @@ function adminSetStatus(id, s) { if (!confirm(s === 'cancelled' ? 'Cancel this b
 function createRefunds(id) {
   const b = AD.b.get(id), by = new Map(); bsq(b).filter(s => s.payment_status === 'paid').forEach(s => by.set(s.player_id, (by.get(s.player_id) || 0) + s.amount_cents));
   adminDo(() => sb.from('payouts').insert([...by].map(([pid, amt]) => ({ board_id: id, player_id: pid, amount_cents: amt, status: 'owed', kind: 'refund', note: 'Board cancelled' }))), 'Refunds added to the Payouts tab.');
-}
-
-/* Player payout info (shown on the player home screen) */
-function payoutCardHtml() {
-  return `<div class="card" style="margin-top:12px"><div class="sec">Payout info</div><div class="sub" style="margin-bottom:8px">Where should we send your winnings? Venmo @name, Zelle email/phone, or Cash App $name.</div>
-    <input class="inp" id="ph" value="${esc(profile?.pay_handle || '')}" placeholder="e.g. Venmo @yourname"><button class="btn out blk" id="phs">Save</button><div id="phm"></div></div>`;
-}
-function bindPayoutCard() {
-  const b = document.getElementById('phs'); if (!b) return;
-  b.onclick = async () => { const v = document.getElementById('ph').value.trim(); const { error } = await sb.from('users').update({ pay_handle: v || null }).eq('id', me.id);
-    document.getElementById('phm').innerHTML = error ? `<div class="err" style="margin-top:8px">${esc(error.message)}</div>` : '<div class="info" style="margin-top:8px">Saved.</div>'; if (!error) profile.pay_handle = v; };
 }
 
 /* ---------- ROUTER ---------- */
